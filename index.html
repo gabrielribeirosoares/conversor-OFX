@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conversor OFX</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root {
+    --bg: #0d0f14;
+    --surface: #151820;
+    --surface2: #1c2030;
+    --border: #252a38;
+    --accent: #4fffb0;
+    --accent2: #ff6b6b;
+    --accent3: #ffd166;
+    --text: #e8eaf2;
+    --muted: #6b7280;
+    --font-display: 'Syne', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(79,255,176,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79,255,176,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  header {
+    margin-bottom: 48px;
+    animation: fadeDown 0.6s ease both;
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    background: rgba(79,255,176,0.08);
+    border: 1px solid rgba(79,255,176,0.2);
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-bottom: 16px;
+  }
+  .tag::before { content: '◆'; font-size: 7px; }
+
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(36px, 6vw, 58px);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -2px;
+    background: linear-gradient(135deg, #ffffff 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .subtitle {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 15px;
+    font-weight: 300;
+    letter-spacing: 0.3px;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 32px;
+    margin-bottom: 20px;
+    transition: border-color 0.2s;
+    animation: fadeUp 0.5s ease both;
+  }
+  .card:hover { border-color: rgba(79,255,176,0.2); }
+  .card:nth-child(1) { animation-delay: 0.1s; }
+  .card:nth-child(2) { animation-delay: 0.2s; }
+  .card:nth-child(3) { animation-delay: 0.3s; }
+
+  .card-title {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--muted);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-title::before {
+    content: '';
+    display: inline-block;
+    width: 16px;
+    height: 1px;
+    background: var(--muted);
+  }
+
+  /* Bank selector */
+  .bank-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+  }
+
+  .bank-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 400;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .bank-btn:hover {
+    border-color: rgba(79,255,176,0.3);
+    background: rgba(79,255,176,0.05);
+    color: var(--accent);
+  }
+  .bank-btn.selected {
+    border-color: var(--accent);
+    background: rgba(79,255,176,0.08);
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .bank-btn .bank-id {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-left: auto;
+  }
+  .bank-btn.selected .bank-id { color: rgba(79,255,176,0.6); }
+
+  /* Drop zone */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 14px;
+    padding: 48px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s;
+    background: var(--surface2);
+    position: relative;
+    overflow: hidden;
+  }
+  .drop-zone::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, rgba(79,255,176,0.04) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: var(--accent);
+    background: rgba(79,255,176,0.04);
+  }
+  .drop-zone:hover::after, .drop-zone.dragover::after { opacity: 1; }
+
+  .drop-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+    display: block;
+    filter: grayscale(1);
+    transition: filter 0.3s;
+  }
+  .drop-zone:hover .drop-icon { filter: grayscale(0); }
+
+  .drop-title {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .drop-sub {
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  #file-input { display: none; }
+
+  /* File info */
+  .file-info {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: rgba(79,255,176,0.06);
+    border: 1px solid rgba(79,255,176,0.2);
+    border-radius: 10px;
+    margin-top: 14px;
+  }
+  .file-info.visible { display: flex; }
+  .file-icon { font-size: 22px; }
+  .file-name { font-family: var(--font-mono); font-size: 13px; color: var(--accent); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file-clear { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; transition: color 0.2s; }
+  .file-clear:hover { color: var(--accent2); }
+
+  /* Convert button */
+  .btn-convert {
+    width: 100%;
+    padding: 18px 32px;
+    background: var(--accent);
+    color: #0d0f14;
+    border: none;
+    border-radius: 12px;
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+  .btn-convert::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: left 0.5s;
+  }
+  .btn-convert:hover::before { left: 100%; }
+  .btn-convert:hover { transform: translateY(-1px); box-shadow: 0 8px 30px rgba(79,255,176,0.25); }
+  .btn-convert:active { transform: translateY(0); }
+  .btn-convert:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* Progress */
+  .progress-wrap {
+    display: none;
+    margin-top: 16px;
+  }
+  .progress-wrap.visible { display: block; }
+  .progress-bar-bg {
+    background: var(--surface2);
+    border-radius: 4px;
+    height: 6px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #00c9ff);
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.3s ease;
+  }
+  .progress-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 8px;
+    text-align: center;
+  }
+
+  /* Result */
+  .result-card {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 32px;
+    margin-top: 20px;
+    animation: fadeUp 0.4s ease both;
+  }
+  .result-card.visible { display: block; }
+  .result-card.success { border-color: rgba(79,255,176,0.3); }
+  .result-card.error { border-color: rgba(255,107,107,0.3); }
+  .result-card.warning { border-color: rgba(255,209,102,0.3); }
+
+  .result-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .result-icon { font-size: 28px; }
+  .result-title { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+  .result-card.success .result-title { color: var(--accent); }
+  .result-card.error .result-title { color: var(--accent2); }
+  .result-card.warning .result-title { color: var(--accent3); }
+
+  .result-stats {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+  .stat {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+  }
+  .stat-val {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--accent);
+  }
+  .stat-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .btn-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background: rgba(79,255,176,0.1);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    color: var(--accent);
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s;
+  }
+  .btn-download:hover {
+    background: rgba(79,255,176,0.18);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(79,255,176,0.15);
+  }
+
+  /* X-Ray modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.8);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .modal-overlay.visible { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    width: 100%;
+    max-width: 760px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    animation: scaleUp 0.25s ease both;
+  }
+  .modal-head {
+    padding: 24px 28px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .modal-head h2 {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .modal-close {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 22px;
+    line-height: 1;
+    transition: color 0.2s;
+  }
+  .modal-close:hover { color: var(--accent2); }
+  .modal-body {
+    padding: 24px 28px;
+    overflow-y: auto;
+    flex: 1;
+  }
+  .xray-text {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.8;
+    color: var(--text);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 380px;
+    overflow-y: auto;
+  }
+  .xray-note {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--muted);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .xray-note::before { content: 'ℹ'; color: var(--accent3); flex-shrink: 0; margin-top: 1px; }
+
+  /* Transactions list */
+  .tx-list {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  .tx-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--surface2);
+    border-radius: 8px;
+    font-size: 13px;
+    animation: fadeUp 0.2s ease both;
+  }
+  .tx-date {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    min-width: 80px;
+  }
+  .tx-memo { flex: 1; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tx-amount {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    min-width: 90px;
+    text-align: right;
+  }
+  .tx-amount.credit { color: var(--accent); }
+  .tx-amount.debit { color: var(--accent2); }
+
+  /* Footer actions */
+  .footer-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+  }
+
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--muted);
+    font-family: var(--font-body);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-secondary:hover { border-color: rgba(79,255,176,0.3); color: var(--text); }
+
+  /* Animations */
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes scaleUp {
+    from { opacity: 0; transform: scale(0.94); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--surface2); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  @media (max-width: 600px) {
+    .card { padding: 20px; }
+    .bank-grid { grid-template-columns: repeat(2, 1fr); }
+    .result-stats { gap: 10px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="tag">Conversor Universal</div>
+    <h1>PDF → OFX</h1>
+    <p class="subtitle">Converta extratos bancários para o formato OFX direto no navegador — sem instalar nada.</p>
+  </header>
+
+  <!-- STEP 1: Bank selection -->
+  <div class="card">
+    <div class="card-title">01 — Selecione o banco</div>
+    <div class="bank-grid" id="bank-grid"></div>
+  </div>
+
+  <!-- STEP 2: File upload -->
+  <div class="card">
+    <div class="card-title">02 — Selecione o extrato PDF</div>
+
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <span class="drop-icon">📄</span>
+      <div class="drop-title">Arraste o PDF aqui</div>
+      <div class="drop-sub">ou clique para selecionar o arquivo</div>
+    </div>
+    <input type="file" id="file-input" accept=".pdf">
+
+    <div class="file-info" id="file-info">
+      <span class="file-icon">📑</span>
+      <span class="file-name" id="file-name"></span>
+      <button class="file-clear" id="file-clear" title="Remover">✕</button>
+    </div>
+  </div>
+
+  <!-- STEP 3: Convert -->
+  <div class="card">
+    <div class="card-title">03 — Converter</div>
+    <button class="btn-convert" id="btn-convert" disabled>Converter para OFX</button>
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-fill"></div></div>
+      <div class="progress-label" id="progress-label">Lendo PDF...</div>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div class="result-card" id="result-card">
+    <div class="result-header">
+      <span class="result-icon" id="result-icon"></span>
+      <span class="result-title" id="result-title"></span>
+    </div>
+    <div id="result-body"></div>
+  </div>
+
+  <!-- Footer actions -->
+  <div class="footer-actions" style="margin-top:24px; animation: fadeUp 0.5s ease 0.4s both;">
+    <button class="btn-secondary" id="btn-xray">🔍 Ver Raio-X do PDF</button>
+  </div>
+
+</div>
+
+<!-- X-Ray Modal -->
+<div class="modal-overlay" id="xray-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>🔍 Raio-X do PDF</h2>
+      <button class="modal-close" id="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="xray-text" id="xray-text">Selecione um arquivo PDF primeiro.</div>
+      <p class="xray-note">
+        Copie o texto acima e cole num assistente de IA para entender o layout do extrato e ajustar o conversor.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── PDF.js setup ────────────────────────────────────────────────────────────
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ─── BANCOS ──────────────────────────────────────────────────────────────────
+const BANCOS = {
+  "Unicred":        { bank_id:"136", type:"UNICRED" },
+  "Sicredi":        { bank_id:"748", type:"STANDARD", date_format:"FULL",
+                      regex:/^\s*(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+([-]?\d{1,3}(?:\.\d{3})*,\d{2})/,
+                      mapping:{date:1, desc:2, amount:3} },
+  "Banco do Brasil":{ bank_id:"001", type:"SPLIT_DATE",
+                      regex_date:/^\s*(\d{2}\/\d{2}\/\d{4})\s*(.*)$/,
+                      regex_amount:/^(.*?)\s+([\d\.,]+\s*\([\+\-]\))$/ },
+  "Banrisul":       { bank_id:"041", type:"STANDARD", date_format:"INHERIT",
+                      regex:/^\s*(?:(\d{2}\/\d{2}\/\d{4})\s+)?(.*?)\s+(\d+(?:\.\d{3})*,\d{2}\s*[-–—]?)(?:\s.*)?$/,
+                      mapping:{date:1, desc:2, amount:3} },
+  "Sicoob":         { bank_id:"756", type:"STANDARD", date_format:"DIA_MES",
+                      regex:/^\s*(\d{2}\/\d{2})\s+(.+?)\s+([\d\.,]+[CDcd]?)\s*$/,
+                      mapping:{date:1, desc:2, amount:3} },
+  "Stone":          { bank_id:"197", type:"STANDARD", date_format:"DD_MM_YY",
+                      regex:/(?:^|\s)(\d{2}\/\d{2}\/\d{2})\s+(?:Entrada|Sa[íi]da)\s*(.*?)\s*([-–—]?\s*R\$\s*[\d\.,]+)/i,
+                      mapping:{date:1, desc:2, amount:3} },
+  "Mercado Pago":   { bank_id:"323", type:"STANDARD", date_format:"DD-MM-YYYY",
+                      regex:/^\s*(\d{2}-\d{2}-\d{4})\s*(.*?)\s+([-–—]?\s*R\$\s*[-–—]?\s*[\d\.,]+)/,
+                      mapping:{date:1, desc:2, amount:3} },
+  
+};
+
+// ─── State ───────────────────────────────────────────────────────────────────
+let selectedBank = null;
+let selectedFile = null;
+let lastTransactions = [];
+let lastPdfText = '';
+
+// ─── Bank grid ───────────────────────────────────────────────────────────────
+const bankGrid = document.getElementById('bank-grid');
+Object.entries(BANCOS).forEach(([name, cfg]) => {
+  const btn = document.createElement('button');
+  btn.className = 'bank-btn';
+  btn.innerHTML = `${name}<span class="bank-id">${cfg.bank_id}</span>`;
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.bank-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedBank = name;
+    updateConvertBtn();
+  });
+  bankGrid.appendChild(btn);
+});
+
+// ─── File input ──────────────────────────────────────────────────────────────
+const dropZone    = document.getElementById('drop-zone');
+const fileInput   = document.getElementById('file-input');
+const fileInfo    = document.getElementById('file-info');
+const fileName    = document.getElementById('file-name');
+const fileClear   = document.getElementById('file-clear');
+
+function setFile(file) {
+  if (!file || file.type !== 'application/pdf') { alert('Por favor, selecione um arquivo PDF.'); return; }
+  selectedFile = file;
+  fileName.textContent = file.name;
+  fileInfo.classList.add('visible');
+  lastPdfText = '';
+  updateConvertBtn();
+}
+
+fileInput.addEventListener('change', e => setFile(e.target.files[0]));
+fileClear.addEventListener('click', e => {
+  e.stopPropagation();
+  selectedFile = null;
+  fileInput.value = '';
+  fileInfo.classList.remove('visible');
+  updateConvertBtn();
+});
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  setFile(e.dataTransfer.files[0]);
+});
+
+function updateConvertBtn() {
+  document.getElementById('btn-convert').disabled = !(selectedBank && selectedFile);
+}
+
+// ─── PDF extraction ──────────────────────────────────────────────────────────
+async function extractTextFromPDF(file, onProgress) {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullText = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items.map(item => item.str).join(' ');
+    // Reconstruct lines: sort items by y then x
+    const lines = [];
+    let lastY = null;
+    let line = '';
+    const sorted = [...content.items].sort((a,b) => {
+      const dy = Math.round(b.transform[5]) - Math.round(a.transform[5]);
+      return dy !== 0 ? dy : a.transform[4] - b.transform[4];
+    });
+    for (const item of sorted) {
+      const y = Math.round(item.transform[5]);
+      if (lastY === null || Math.abs(y - lastY) > 3) {
+        if (line) lines.push(line);
+        line = item.str;
+        lastY = y;
+      } else {
+        const gap = item.transform[4] - (sorted[sorted.indexOf(item)-1]?.transform[4] + sorted[sorted.indexOf(item)-1]?.width || 0);
+        line += (gap > 5 ? '  ' : ' ') + item.str;
+      }
+    }
+    if (line) lines.push(line);
+    fullText += lines.join('\n') + '\n';
+    if (onProgress) onProgress(i / pdf.numPages);
+  }
+  return fullText;
+}
+
+// ─── Currency parser ─────────────────────────────────────────────────────────
+function cleanCurrency(str) {
+  if (!str) return null;
+  const isNeg = /[-–—]/.test(str) || /[Dd]/.test(str.replace(/R\$/, ''));
+  let clean = str.replace(/[R$\s\-–—CDcd()+]/g, '').replace(/\./g, '').replace(',', '.');
+  const val = parseFloat(clean);
+  if (isNaN(val)) return null;
+  return isNeg ? -val : val;
+}
+
+// ─── Date parser ─────────────────────────────────────────────────────────────
+function parseDate(str, fmt) {
+  // fmt: "DD/MM/YYYY"
+  const [d,m,y] = str.split('/').map(Number);
+  return new Date(y, m-1, d);
+}
+
+function formatDateOFX(dt) {
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth()+1).padStart(2,'0');
+  const d = String(dt.getDate()).padStart(2,'0');
+  return `${y}${m}${d}`;
+}
+
+function formatDateDisplay(dt) {
+  return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()}`;
+}
+
+// ─── Simple MD5 ──────────────────────────────────────────────────────────────
+async function md5hash(str) {
+  const buf = new TextEncoder().encode(str);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('').substring(0,32);
+}
+
+// ─── Main processor ──────────────────────────────────────────────────────────
+async function processText(text, bankConfig) {
+  const transactions = [];
+  const lines = text.split('\n');
+  const layout = bankConfig.type;
+
+  const mesesMap = {JAN:"01",FEV:"02",MAR:"03",ABR:"04",MAI:"05",JUN:"06",
+                    JUL:"07",AGO:"08",SET:"09",OUT:"10",NOV:"11",DEZ:"12"};
+
+  let currentMonth = String(new Date().getMonth()+1).padStart(2,'0');
+  let currentYear  = String(new Date().getFullYear());
+  let lastDay = null;
+  let currentTx = null;
+  let nextMemoBuffer = '';
+
+  const IGNORAR = [
+    "SALDO","TOTAL","HISTÓRICO","HISTORICO","DATA","PÁGINA","PAGINA","SICOOB","OUVIDORIA",
+    "LOTE","DOCUMENTO","PERÍODO","PERIODO","NOME","INSTITUIÇÃO","DADOS DA CONTA",
+    "CONTRAPARTE","TIPO","DESCRIÇÃO","DESCRICAO","VALOR","EXTRATO","EMITIDO",
+    "STONE","AGÊNCIA","AGENCIA","CONTA","DETALHE DOS","ID DA",
+    "DDAATTAA","ENTRADAS","SAIDAS","SAÍDAS","CPF","CNPJ",
+    "BANCO DO ESTADO","BVP-PORTAL","SALDOS E MOVIMENTOS","DADOS SELECIONADOS",
+    "CLASSIFICAÇÃO","CLASSIFICACAO","EXTRA-CONTÁBIL","EXTRA-CONTABIL",
+    "LIMITE","---","PARA SIMPLES","INVEST RESGATE","INVESTIMENTOS",
+    "ENCARGOS FINANCEIROS","TAXA DE JUROS","CUSTO EFETIVO",
+    "PARA GARANTIR","PREZADO CLIENTE","ULTIMO DIA","BANRICOMPRAS",
+    "UTILIZADO","DISPONIVEL","VALORES DISPONIVEIS","CDB AUTOMATICO","POSICAO EM",
+    "++","OPERACAO","O LIMITE","QUANTIDADE","BENEFICIOS","TEB","O SALDO DEVEDOR",
+    "AG:","CC:","PAGAMENTO S.A","INFORMAÇÕES DO COMPROVANTE","CÓDIGO DA AUTENTICAÇÃO",
+    "INFORMACÕES","CODIGO DA AUTENTICACAO","SE NOSSO ATENDIMENTO","DÚVIDAS","DUVIDAS",
+    "REGIÕES","REGIOES","ENVIE UM","OUTRAS","3004-","0800",
+    "ID. DOC","ID.DOC","ID DOC","ID.","COOPERATIVA 515","UNICRED","SISTEMA DE COOPERATIVAS"
+  ];
+
+  function removerLoteDoc(texto) {
+    const partes = texto.trim().split(/\s+/);
+    while (partes.length && /^\d+$/.test(partes[0])) partes.shift();
+    return partes.join(' ');
+  }
+
+  async function saveTx() {
+    if (!currentTx || currentTx.amount === null || currentTx.amount === undefined) return;
+    let memo = currentTx.memo.replace(/\(cid:\d+\)/g,' ').replace(/\s+/g,' ').trim();
+
+    const upper = memo.toUpperCase();
+    if (["SALDO ANTERIOR","SALDO DO DIA","SALDO INICIAL","SALDO NA DATA","SALDO CALC"].some(s => upper.includes(s))) return;
+
+    for (const p of ["PIX ","Pix - Enviado","Pix - Recebido","Pix | ","Pix "]) {
+      if (memo.startsWith(p)) { memo = memo.slice(p.length).trim(); break; }
+    }
+    if (!memo) memo = "Transação Sem Descrição";
+
+    const fitid = await md5hash(`${currentTx.date.toISOString()}${currentTx.amount}${memo}`);
+    transactions.push({ date: currentTx.date, amount: currentTx.amount, memo, fitid });
+  }
+
+  for (const rawLine of lines) {
+    const linha = rawLine.trim();
+    if (!linha) continue;
+
+    // Caçador de ano
+    const mAno = linha.match(/PER[IÍ]ODO.*?(20\d{2})/i);
+    if (mAno) currentYear = mAno[1];
+
+    // Caçador de mês/ano para Banrisul
+    if (layout === "STANDARD" && (bankConfig.date_format === "INHERIT" || bankConfig.date_format === "DIA_APENAS")) {
+      const mRef = linha.match(/(?:Data Ref\.:|até\s+)\d{2}\/(\d{2})\/(\d{4})/i);
+      if (mRef) { currentMonth = mRef[1]; currentYear = mRef[2]; }
+      else {
+        const mMov = linha.match(/MOVIMENTOS\s+([A-Z]{3})\/(\d{4})/i);
+        if (mMov) { currentMonth = mesesMap[mMov[1].toUpperCase()] || currentMonth; currentYear = mMov[2]; }
+      }
+    }
+
+    const upper = linha.toUpperCase();
+    let skip = IGNORAR.some(p => upper.startsWith(p));
+    if (!skip && (/I=PDF|U=NC|G=30/.test(upper))) skip = true;
+    if (!skip && /^[\+\-\s]+$/.test(linha)) skip = true;
+    if (!skip && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(linha.toLowerCase())) skip = true;
+    if (!skip && /^\s*\d{2}[-\/]\d{2}[-\/]\d{2,4}\s+(?:a|até|al|-)\s+\d{2}[-\/]\d{2}[-\/]\d{2,4}/i.test(linha)) skip = true;
+    if (skip) continue;
+
+    // ── UNICRED ──────────────────────────────────────────────────
+    if (layout === "UNICRED") {
+      const mDate = linha.match(/^\s*(\d{2}\/\d{2}\/\d{4})\s+(.+)$/);
+      if (mDate) {
+        const dateStr = mDate[1];
+        let resto = mDate[2];
+        const m2 = resto.match(/(.*?)\s+([-]?\d{1,3}(?:\.\d{3})*,\d{2})\s+([-]?\d{1,3}(?:\.\d{3})*,\d{2})$/);
+        const m1 = resto.match(/(.*?)\s+([-]?\d{1,3}(?:\.\d{3})*,\d{2})$/);
+        let valStr = null, desc = resto.trim();
+        if (m2 && m2[1].trim()) { desc = m2[1].trim(); valStr = m2[2]; }
+        else if (m1 && m1[1].trim()) { desc = m1[1].trim(); valStr = m1[2]; }
+        desc = desc.replace(/^\d{5,}\s+/,'').replace(/^(?:CRED PIX|DEB PIX|DomDeb|TEV|DOC|TED|PIX|TAR|TRF|DEP)\s+/i,'').replace(/\s+/g,' ').trim();
+        if (nextMemoBuffer) { desc = `${nextMemoBuffer.trim()} ${desc}`.trim(); nextMemoBuffer = ''; }
+        await saveTx();
+        const dt = parseDate(dateStr, 'DD/MM/YYYY');
+        currentTx = { date: dt, amount: valStr ? cleanCurrency(valStr) : null, memo: desc };
+      } else {
+        if (currentTx !== null) {
+          if (currentTx.amount === null) {
+            const m2l = linha.match(/^\s*([-]?\d{1,3}(?:\.\d{3})*,\d{2})\s+([-]?\d{1,3}(?:\.\d{3})*,\d{2})/);
+            const m1l = linha.match(/^\s*([-]?\d{1,3}(?:\.\d{3})*,\d{2})/);
+            if (m2l) {
+              currentTx.amount = cleanCurrency(m2l[1]);
+              const rest = linha.slice(m2l[0].length).trim();
+              if (rest) currentTx.memo += ' ' + rest;
+            } else if (m1l) {
+              currentTx.amount = cleanCurrency(m1l[1]);
+              const rest = linha.slice(m1l[0].length).trim();
+              if (rest) currentTx.memo += ' ' + rest;
+            } else { currentTx.memo += ' ' + linha; }
+          } else { currentTx.memo += ' ' + linha; }
+        } else { nextMemoBuffer += ' ' + linha; }
+      }
+    }
+
+    // ── SPLIT_DATE (Banco do Brasil) ──────────────────────────────
+    else if (layout === "SPLIT_DATE") {
+      const mDate = linha.match(bankConfig.regex_date);
+      if (mDate) {
+        const dateStr = mDate[1];
+        if (dateStr === "00/00/0000") continue;
+        await saveTx();
+        let memoStart = removerLoteDoc(mDate[2].trim());
+        if (nextMemoBuffer) { memoStart = `${nextMemoBuffer.trim()} ${memoStart}`.trim(); nextMemoBuffer = ''; }
+        currentTx = { date: parseDate(dateStr, 'DD/MM/YYYY'), memo: memoStart, amount: null };
+        continue;
+      }
+      if (currentTx !== null) {
+        if (currentTx.amount === null) {
+          const mAmt = linha.match(bankConfig.regex_amount);
+          if (mAmt) {
+            const antes = removerLoteDoc(mAmt[1].trim());
+            if (antes) currentTx.memo += ' ' + antes;
+            const amt = cleanCurrency(mAmt[2]);
+            if (amt !== null) currentTx.amount = amt;
+            continue;
+          }
+        }
+        const extra = removerLoteDoc(linha);
+        if (extra) currentTx.memo += ' ' + extra;
+      }
+    }
+
+    // ── STANDARD ──────────────────────────────────────────────────
+    else if (layout === "STANDARD") {
+      const match = linha.match(bankConfig.regex);
+      if (match) {
+        await saveTx();
+        currentTx = null;
+        const g = match;
+        const mi = bankConfig.mapping;
+        let dateStr = g[mi.date];
+        let descRaw = g[mi.desc] || '';
+        const valueStr = g[mi.amount];
+
+        if (bankConfig.bank_id === "323") descRaw = descRaw.replace(/\s*\d{8,}\s*$/,'');
+        else if (bankConfig.bank_id === "041") descRaw = descRaw.trim().replace(/\s+\d{4,}\s*$/,'');
+
+        const fmt = bankConfig.date_format;
+        if (fmt === "DIA_MES") {
+          dateStr = `${dateStr}/${currentYear}`;
+        } else if (fmt === "DIA_APENAS") {
+          if (dateStr) lastDay = dateStr; else { if (!lastDay) continue; dateStr = lastDay; }
+          dateStr = `${dateStr}/${currentMonth}/${currentYear}`;
+        } else if (fmt === "DD_MM_YY") {
+          const p = dateStr.split('/');
+          if (p.length===3 && p[2].length===2) dateStr = `${p[0]}/${p[1]}/20${p[2]}`;
+        } else if (fmt === "DD-MM-YYYY") {
+          dateStr = dateStr.replace(/-/g,'/');
+        } else if (fmt === "INHERIT") {
+          if (dateStr) lastDay = dateStr; else { if (!lastDay) continue; dateStr = lastDay; }
+        }
+
+        const dt = parseDate(dateStr, 'DD/MM/YYYY');
+        const amt = cleanCurrency(valueStr);
+        if (amt === null) continue;
+        let memoStart = removerLoteDoc(descRaw.trim());
+        if (nextMemoBuffer) { memoStart = `${nextMemoBuffer.trim()} ${memoStart}`.trim(); nextMemoBuffer = ''; }
+        currentTx = { date: dt, amount: amt, memo: memoStart };
+      } else {
+        const extra = removerLoteDoc(linha);
+        if (extra) {
+          if (currentTx) {
+            if (bankConfig.bank_id === "197") {
+              const lixo = ["STONE","AG:","CC:","PAGAMENTO S.A","INSTITUIÇ","CONTRAPARTE"];
+              const trailing = ["PIX","ANTECIPA","TRANSFER","MAQUININHA","CARTÃO","CARTAO","CRÉDITO","CREDITO","DÉBITO","DEBITO"];
+              if (lixo.some(c => extra.toUpperCase().includes(c))) { /* skip */ }
+              else if (trailing.some(t => extra.toUpperCase().includes(t))) currentTx.memo += ' ' + extra;
+              else nextMemoBuffer += ' ' + extra;
+            } else if (bankConfig.bank_id === "323") {
+              const mpH = ["PAGAMENTO COM","TRANSFERÊNCIA","TRANSFERENCIA","PIX ENVIADO","PIX RECEBIDO","LIBERAÇÃO","LIBERACAO","RENDIMENTO","PAGAMENTO DE","COMPRA ","RECARGA ","TARIFA","ESTORNO","DEVOLUÇÃO","DEVOLUCAO"];
+              if (mpH.some(p => extra.toUpperCase().startsWith(p)) && !/\d/.test(extra)) nextMemoBuffer += ' ' + extra;
+              else currentTx.memo += ' ' + extra;
+            } else { currentTx.memo += ' ' + extra; }
+          } else {
+            if (bankConfig.bank_id === "197" && ["STONE","AG:","CC:","PAGAMENTO S.A","INSTITUIÇ","CONTRAPARTE"].some(c => extra.toUpperCase().includes(c))) { /* skip */ }
+            else nextMemoBuffer += ' ' + extra;
+          }
+        }
+      }
+    }
+  }
+
+  if (nextMemoBuffer && currentTx) currentTx.memo += ' ' + nextMemoBuffer.trim();
+  await saveTx();
+  return transactions;
+}
+
+// ─── OFX generator ───────────────────────────────────────────────────────────
+function generateOFX(transactions, bankId) {
+  const now = new Date();
+  const ts = now.getFullYear().toString() +
+    String(now.getMonth()+1).padStart(2,'0') +
+    String(now.getDate()).padStart(2,'0') +
+    String(now.getHours()).padStart(2,'0') +
+    String(now.getMinutes()).padStart(2,'0') +
+    String(now.getSeconds()).padStart(2,'0');
+
+  const header = `OFXHEADER:100\nDATA:OFXSGML\nVERSION:102\nSECURITY:NONE\nENCODING:USASCII\nCHARSET:1252\nCOMPRESSION:NONE\nOLDFILEUID:NONE\nNEWFILEUID:NONE\n<OFX>\n<SIGNONMSGSRSV1><SONRS><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>\n<DTSERVER>${ts}</DTSERVER><LANGUAGE>POR</LANGUAGE></SONRS></SIGNONMSGSRSV1>\n<BANKMSGSRSV1><STMTTRNRS><TRNUID>1001</TRNUID>\n<STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>\n<STMTRS><CURDEF>BRL</CURDEF>\n<BANKACCTFROM><BANKID>${bankId}</BANKID><ACCTID>00000</ACCTID><ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM>\n<BANKTRANLIST><DTSTART>${ts}</DTSTART><DTEND>${ts}</DTEND>\n`;
+
+  let body = '';
+  for (const tx of transactions) {
+    const dtFmt = formatDateOFX(tx.date);
+    const trntype = tx.amount > 0 ? 'CREDIT' : 'DEBIT';
+    const safeMemo = tx.memo.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    body += `<STMTTRN><TRNTYPE>${trntype}</TRNTYPE><DTPOSTED>${dtFmt}</DTPOSTED><TRNAMT>${tx.amount.toFixed(2)}</TRNAMT><FITID>${tx.fitid}</FITID><MEMO>${safeMemo}</MEMO></STMTTRN>\n`;
+  }
+
+  const footer = `</BANKTRANLIST><LEDGERBAL><BALAMT>0.00</BALAMT><DTASOF>${ts}</DTASOF></LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`;
+  return header + body + footer;
+}
+
+function downloadOFX(content, filename) {
+  const blob = new Blob([content], { type: 'application/x-ofx' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── UI helpers ──────────────────────────────────────────────────────────────
+function setProgress(pct, label) {
+  document.getElementById('progress-fill').style.width = (pct*100) + '%';
+  document.getElementById('progress-label').textContent = label;
+}
+
+function showResult(type, icon, title, bodyHTML) {
+  const card = document.getElementById('result-card');
+  card.className = `result-card visible ${type}`;
+  document.getElementById('result-icon').textContent = icon;
+  document.getElementById('result-title').textContent = title;
+  document.getElementById('result-body').innerHTML = bodyHTML;
+}
+
+// ─── Convert button ───────────────────────────────────────────────────────────
+document.getElementById('btn-convert').addEventListener('click', async () => {
+  if (!selectedBank || !selectedFile) return;
+  const cfg = BANCOS[selectedBank];
+  const btn = document.getElementById('btn-convert');
+  const progressWrap = document.getElementById('progress-wrap');
+
+  btn.disabled = true;
+  progressWrap.classList.add('visible');
+  document.getElementById('result-card').className = 'result-card';
+  setProgress(0, 'Lendo PDF...');
+
+  try {
+    // Extract text
+    const text = await extractTextFromPDF(selectedFile, p => {
+      setProgress(p * 0.6, `Lendo página ${Math.round(p * 100)}%...`);
+    });
+    lastPdfText = text;
+    setProgress(0.65, 'Processando transações...');
+
+    const txs = await processText(text, cfg);
+    lastTransactions = txs;
+    setProgress(0.9, 'Gerando arquivo OFX...');
+
+    if (txs.length === 0) {
+      setProgress(1, 'Concluído');
+      showResult('warning','⚠️','Nenhuma transação encontrada',
+        `<p style="color:var(--muted);font-size:14px;line-height:1.7">O PDF foi lido com sucesso, mas nenhuma transação foi identificada.<br>
+        O layout do extrato pode não corresponder ao banco selecionado.<br>
+        Use o botão <strong style="color:var(--accent3)">🔍 Ver Raio-X</strong> para diagnosticar o problema.</p>`);
+    } else {
+      const ofxContent = generateOFX(txs, cfg.bank_id);
+      setProgress(1, `${txs.length} transações processadas ✓`);
+
+      const credits = txs.filter(t => t.amount > 0);
+      const debits  = txs.filter(t => t.amount < 0);
+      const totalC  = credits.reduce((s,t) => s + t.amount, 0);
+      const totalD  = debits.reduce((s,t)  => s + Math.abs(t.amount), 0);
+
+      const txListHTML = txs.slice(0, 50).map(t =>
+        `<div class="tx-item">
+          <span class="tx-date">${formatDateDisplay(t.date)}</span>
+          <span class="tx-memo">${t.memo.replace(/</g,'&lt;')}</span>
+          <span class="tx-amount ${t.amount>0?'credit':'debit'}">${t.amount>0?'+':'-'} R$ ${Math.abs(t.amount).toFixed(2).replace('.',',')}</span>
+        </div>`
+      ).join('') + (txs.length > 50 ? `<div class="tx-item" style="justify-content:center;color:var(--muted)">... e mais ${txs.length-50} transações</div>` : '');
+
+      const ofxName = selectedFile.name.replace('.pdf','.ofx');
+      showResult('success','✅','OFX Gerado com Sucesso',`
+        <div class="result-stats">
+          <div class="stat"><div class="stat-val">${txs.length}</div><div class="stat-label">Transações</div></div>
+          <div class="stat"><div class="stat-val" style="color:var(--accent)">R$ ${totalC.toFixed(2).replace('.',',')}</div><div class="stat-label">Total créditos</div></div>
+          <div class="stat"><div class="stat-val" style="color:var(--accent2)">R$ ${totalD.toFixed(2).replace('.',',')}</div><div class="stat-label">Total débitos</div></div>
+        </div>
+        <button class="btn-download" id="btn-dl">⬇ Baixar ${ofxName}</button>
+        <div class="tx-list" id="tx-list">${txListHTML}</div>
+      `);
+
+      document.getElementById('btn-dl').addEventListener('click', () => downloadOFX(ofxContent, ofxName));
+    }
+  } catch (err) {
+    setProgress(0, '');
+    showResult('error','❌','Erro ao processar',
+      `<p style="color:var(--muted);font-size:13px;font-family:var(--font-mono)">${err.message}</p>`);
+  }
+
+  btn.disabled = false;
+});
+
+// ─── X-Ray ───────────────────────────────────────────────────────────────────
+document.getElementById('btn-xray').addEventListener('click', async () => {
+  const modal = document.getElementById('xray-modal');
+  const xrayText = document.getElementById('xray-text');
+  modal.classList.add('visible');
+
+  if (!selectedFile) {
+    xrayText.textContent = 'Selecione um arquivo PDF primeiro (Passo 02).';
+    return;
+  }
+
+  if (lastPdfText) {
+    xrayText.textContent = lastPdfText.split('\n').slice(0,60).join('\n');
+    return;
+  }
+
+  xrayText.textContent = 'Extraindo texto do PDF...';
+  try {
+    const text = await extractTextFromPDF(selectedFile, null);
+    lastPdfText = text;
+    xrayText.textContent = text.split('\n').slice(0,60).join('\n');
+  } catch (e) {
+    xrayText.textContent = 'Erro ao ler PDF: ' + e.message;
+  }
+});
+
+document.getElementById('modal-close').addEventListener('click', () => {
+  document.getElementById('xray-modal').classList.remove('visible');
+});
+document.getElementById('xray-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('visible');
+});
+</script>
+</body>
+</html>
