@@ -1045,3 +1045,54 @@ document.getElementById('btn-reset-password').onclick = async () => {
         btn.innerText = "Tentar novamente";
     }
 };
+
+// 1. Detecta que o utilizador voltou pelo link do e-mail
+supabaseClient.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'PASSWORD_RECOVERY') {
+    // Esconde a tela de login (se estiver aberta) e força a entrada no app
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display = 'block';
+    
+    // Navega diretamente para a nossa nova tela de atualizar senha
+    navegarPara('view-update-password');
+  }
+  
+  // (Mantenha o resto da sua lógica SIGNED_IN / SIGNED_OUT aqui se já tiver)
+});
+
+// 2. Lógica para guardar a nova senha
+document.getElementById('btn-save-new-password').onclick = async () => {
+  const novaSenha = document.getElementById('new-recovery-password').value;
+  const msg = document.getElementById('recovery-msg');
+  const btn = document.getElementById('btn-save-new-password');
+
+  if (novaSenha.length < 6) {
+    msg.style.color = "var(--accent2)"; // Vermelho
+    msg.textContent = "A senha deve ter pelo menos 6 caracteres.";
+    return;
+  }
+
+  btn.disabled = true;
+  msg.style.color = "var(--text)";
+  msg.textContent = "A atualizar a senha...";
+
+  // Atualiza a senha no banco de dados do Supabase
+  const { error } = await supabaseClient.auth.updateUser({ password: novaSenha });
+
+  if (error) {
+    msg.style.color = "var(--accent2)";
+    msg.textContent = "Erro: " + traduzirErro(error.message);
+    btn.disabled = false;
+  } else {
+    msg.style.color = "var(--accent)"; // Verde
+    msg.textContent = "✅ Senha atualizada com sucesso!";
+    
+    // Limpa o campo e volta para o conversor após 2 segundos
+    setTimeout(() => {
+      document.getElementById('new-recovery-password').value = '';
+      btn.disabled = false;
+      msg.textContent = '';
+      navegarPara('view-converter');
+    }, 2000);
+  }
+};
