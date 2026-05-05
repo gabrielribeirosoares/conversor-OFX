@@ -131,7 +131,7 @@ document.getElementById('btn-do-login').onclick = async () => {
       return;
     }
 
-    authError.textContent = 'A entrar...';
+    authError.textContent = 'Acessando...';
 
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
