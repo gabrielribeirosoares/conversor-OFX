@@ -86,7 +86,7 @@ document.getElementById('btn-do-register').onclick = async () => {
 
     // Se passou pelas validações, limpa erros antigos e prossegue
     authError.style.color = 'var(--text)';
-    authError.textContent = 'A criar conta...';
+    authError.textContent = 'Criando conta...';
 
     const { data, error } = await supabaseClient.auth.signUp({
       email,
