@@ -1013,3 +1013,35 @@ document.getElementById('menu-limits').onclick = async () => {
 
 // Abrir Sobre
 document.getElementById('menu-about').onclick = () => navegarPara('view-about');
+
+// Adicione isto junto aos outros eventos do menu/perfil
+document.getElementById('btn-reset-password').onclick = async () => {
+    const btn = document.getElementById('btn-reset-password');
+    const msg = document.getElementById('reset-msg');
+    
+    try {
+        const { data: { user } } = await supabaseClient.auth.getUser();
+        
+        if (!user) return;
+
+        btn.disabled = true;
+        btn.innerText = "Enviando...";
+
+        const { error } = await supabaseClient.auth.resetPasswordForEmail(user.email, {
+            redirectTo: 'https://conversor-ofx-six.vercel.app/', // URL do seu site na Vercel
+        });
+
+        if (error) throw error;
+
+        msg.style.color = "var(--accent)";
+        msg.textContent = "E-mail de redefinição enviado! Verifique sua caixa de entrada.";
+        btn.innerText = "E-mail Enviado";
+
+    } catch (err) {
+        console.error("Erro ao resetar senha:", err);
+        msg.style.color = "var(--accent2)";
+        msg.textContent = "Erro ao enviar e-mail. Tente novamente mais tarde.";
+        btn.disabled = false;
+        btn.innerText = "Tentar novamente";
+    }
+};
