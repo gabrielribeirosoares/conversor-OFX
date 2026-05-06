@@ -18,7 +18,7 @@ function traduzirErro(mensagemOriginal) {
 
   if (msg.includes('password should contain')) return 'A senha deve conter letras e números.';
   if (msg.includes('at least 6 characters')) return 'A senha deve ter pelo menos 6 caracteres.';
-  if (msg.includes('already registered')) return 'Este e-mail já está registado.';
+  if (msg.includes('already registered')) return 'Este e-mail já está registrado.';
   if (msg.includes('invalid login credentials')) return 'E-mail ou senha incorretos.';
   if (msg.includes('rate limit')) return 'Muitas tentativas. Aguarde um momento.';
 
@@ -64,9 +64,6 @@ document.getElementById('btn-do-register').onclick = async () => {
     if (!firstName || !lastName || !office || !email || !password) {
       authError.style.color = 'var(--accent2)';
       authError.textContent = 'Preencha todos os campos (Nome, Apelido, Escritório, E-mail e Senha).';
-      if (!firstName) document.getElementById('reg-first-name').focus();
-      else if (!lastName) document.getElementById('reg-last-name').focus();
-      else if (!office) document.getElementById('reg-office').focus();
       return;
     }
 
@@ -107,7 +104,7 @@ document.getElementById('btn-do-register').onclick = async () => {
 };
 
 // ============================================================================
-// 2. LÓGICA DE LOGIN E SESSÃO
+// 2. LÓGICA DE LOGIN E SESSÃO (BLINDADA)
 // ============================================================================
 document.getElementById('btn-do-login').onclick = async () => {
   try {
@@ -130,11 +127,8 @@ document.getElementById('btn-do-login').onclick = async () => {
       authError.textContent = traduzirErro(error.message);
     } else {
       authError.textContent = '';
-      try {
-        await verificarAcessoEPlano();
-      } catch (e) {}
       permitirEntrada();
-      iniciarMonitoramento();
+      try { await verificarAcessoEPlano(); } catch (e) {}
     }
   } catch (err) {
     authError.style.color = 'var(--accent2)';
@@ -147,50 +141,25 @@ document.getElementById('btn-logout').onclick = async () => {
   bloquearSaida();
 };
 
-async function validarUsuarioNoServidor() {
-  const { data: { user }, error } = await supabaseClient.auth.getUser();
-  if (error || !user) {
-    await supabaseClient.auth.signOut();
-    bloquearSaida();
-    authError.style.color = 'var(--accent2)';
-    authError.textContent = "Sua conta foi desativada ou excluída.";
-    return false;
-  }
-  return true;
-}
-
-let monitorAcesso = null;
-function iniciarMonitoramento() {
-  if (monitorAcesso) clearInterval(monitorAcesso);
-  monitorAcesso = setInterval(async () => {
-    const ativo = await validarUsuarioNoServidor();
-    if (!ativo) clearInterval(monitorAcesso);
-  }, 60000); 
-}
-
 async function verificarSessaoInicial() {
+  // getSession é instantâneo e lê o cache seguro, não gera Rate Limit no Supabase
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session) {
-    const aindaExiste = await validarUsuarioNoServidor();
-    if (aindaExiste) {
-      await verificarAcessoEPlano(); // Atualiza limites na hora
-      permitirEntrada();
-      iniciarMonitoramento(); 
-    }
+    permitirEntrada();
+    try { await verificarAcessoEPlano(); } catch (e) {}
   } else {
     bloquearSaida();
   }
 }
 
-// ÚNICO OBSERVADOR DE ESTADO (Unificado)
 supabaseClient.auth.onAuthStateChange(async (event, session) => {
-  if (event === 'SIGNED_IN') {
-    try { await verificarAcessoEPlano(); } catch (e) {}
-    iniciarMonitoramento();
-    permitirEntrada();
-    if (authError) authError.textContent = ''; 
+  if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+    if (session) {
+      permitirEntrada();
+      if (authError) authError.textContent = ''; 
+      try { await verificarAcessoEPlano(); } catch (e) {}
+    }
   } else if (event === 'SIGNED_OUT') {
-    if (typeof monitorAcesso !== 'undefined') clearInterval(monitorAcesso);
     bloquearSaida();
   } else if (event === 'PASSWORD_RECOVERY') {
     document.getElementById('auth-screen').style.display = 'none';
@@ -208,15 +177,17 @@ document.getElementById('btn-reset-password').onclick = async () => {
   const btn = document.getElementById('btn-reset-password');
   const msg = document.getElementById('reset-msg');
   try {
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    if (!user) return;
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) return;
+    
     btn.disabled = true;
     btn.innerText = "Enviando...";
 
-    const { error } = await supabaseClient.auth.resetPasswordForEmail(user.email, {
+    const { error } = await supabaseClient.auth.resetPasswordForEmail(session.user.email, {
       redirectTo: 'https://conversor-ofx-six.vercel.app/', 
     });
     if (error) throw error;
+    
     msg.style.color = "var(--accent)";
     msg.textContent = "E-mail de redefinição enviado! Verifique sua caixa de entrada.";
     btn.innerText = "E-mail Enviado";
@@ -240,7 +211,7 @@ document.getElementById('btn-save-new-password').onclick = async () => {
   }
   btn.disabled = true;
   msg.style.color = "var(--text)";
-  msg.textContent = "A atualizar a senha...";
+  msg.textContent = "Atualizando a senha...";
 
   const { error } = await supabaseClient.auth.updateUser({ password: novaSenha });
   if (error) {
@@ -288,9 +259,9 @@ document.querySelectorAll('.back-btn').forEach(btn => {
 document.getElementById('menu-converter').onclick = () => navegarPara('view-converter');
 
 document.getElementById('menu-profile').onclick = async () => {
-  const { data: { user } } = await supabaseClient.auth.getUser();
-  if (user) {
-    const { data: profile } = await supabaseClient.from('profiles').select('*').eq('id', user.id).single();
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session) {
+    const { data: profile } = await supabaseClient.from('profiles').select('*').eq('id', session.user.id).single();
     if (profile) {
       document.getElementById('prof-name').textContent = `${profile.first_name} ${profile.last_name}`;
       document.getElementById('prof-office').textContent = profile.office;
@@ -301,9 +272,9 @@ document.getElementById('menu-profile').onclick = async () => {
 };
 
 document.getElementById('menu-limits').onclick = async () => {
-  const { data: { user } } = await supabaseClient.auth.getUser();
-  if (user) {
-    const { data: profile } = await supabaseClient.from('profiles').select('conversions_used, conversion_limit').eq('id', user.id).single();
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session) {
+    const { data: profile } = await supabaseClient.from('profiles').select('conversions_used, conversion_limit').eq('id', session.user.id).single();
     if (profile) {
       const uso = profile.conversions_used || 0;
       const limite = profile.conversion_limit || 3;
@@ -333,13 +304,13 @@ document.getElementById('btn-subscribe-fixed').addEventListener('click', () => {
 });
 
 async function verificarAcessoEPlano() {
-  const { data: { user } } = await supabaseClient.auth.getUser();
-  if (!user) return false;
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) return false;
 
   const { data: profile, error } = await supabaseClient
     .from('profiles')
     .select('plan_status, conversion_limit, conversions_used, last_conversion_date')
-    .eq('id', user.id)
+    .eq('id', session.user.id)
     .single();
 
   if (error || !profile) return false;
@@ -360,7 +331,7 @@ async function verificarAcessoEPlano() {
       tagAssinatura.textContent = "Assinatura Profissional";
       tagAssinatura.style.background = "var(--accent)";
     }
-    btnConverter.disabled = false;
+    btnConverter.disabled = !(selectedBank && selectedFile);
     btnConverter.innerText = "Converter para OFX";
     return true;
   }
@@ -843,13 +814,12 @@ function showResult(type, icon, title, bodyHTML) {
 document.getElementById('btn-convert').addEventListener('click', async () => {
   if (!selectedBank || !selectedFile) return;
 
-  // TRAVA DE SEGURANÇA MÁXIMA (Double-check no Servidor contra uso do F5)
   const btn = document.getElementById('btn-convert');
   btn.disabled = true;
   btn.innerText = "Verificando limites...";
 
   const podeConverter = await verificarAcessoEPlano();
-  if (!podeConverter) return; // Se for false, a própria função já acendeu a tela vermelha
+  if (!podeConverter) return; 
 
   const cfg = BANCOS[selectedBank];
   const progressWrap = document.getElementById('progress-wrap');
@@ -879,14 +849,14 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
       const ofxContent = generateOFX(txs, cfg.bank_id);
       setProgress(1, `${txs.length} transações processadas ✓`);
 
-      const { data: { user } } = await supabaseClient.auth.getUser();
-      if (user) {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (session) {
         const hoje = new Date().toISOString().split('T')[0];
 
         const { data: profile } = await supabaseClient
           .from('profiles')
           .select('conversions_used, last_conversion_date, plan_status')
-          .eq('id', user.id)
+          .eq('id', session.user.id)
           .single();
 
         if (profile) {
@@ -900,12 +870,7 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
           const { error: erroUpdate } = await supabaseClient.from('profiles').update({
             conversions_used: novoUso,
             last_conversion_date: hoje
-          }).eq('id', user.id);
-
-          if (erroUpdate) {
-            console.error("ERRO DO SUPABASE:", erroUpdate);
-            alert("Erro de segurança no banco de dados: " + erroUpdate.message + "\n(Verifique as políticas de RLS no Supabase!)");
-          }
+          }).eq('id', session.user.id);
 
           if (typeof verificarAcessoEPlano === "function") {
             await verificarAcessoEPlano();
@@ -952,7 +917,6 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
       `<p style="color:var(--muted);font-size:13px;font-family:var(--font-mono)">${err.message}</p>`);
   }
 
-  // Desbloqueia o botão utilizando a nossa regra inteligente (impede ligar o botão se bater o limite)
   updateConvertBtn();
 });
 
