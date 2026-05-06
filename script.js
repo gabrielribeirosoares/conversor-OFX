@@ -136,10 +136,32 @@ document.getElementById('btn-do-login').onclick = async () => {
   }
 };
 
-document.getElementById('btn-logout').onclick = async () => {
-  await supabaseClient.auth.signOut();
+// ============================================================================
+// BOTÃO DE SAIR (LOGOUT BLINDADO)
+// ============================================================================
+document.getElementById('btn-logout').addEventListener('click', async () => {
+  // 1. Força o fechamento do menu lateral instantaneamente
+  const sideMenu = document.getElementById('side-menu');
+  const overlay = document.getElementById('sidebar-overlay');
+  if (sideMenu) sideMenu.classList.remove('active');
+  if (overlay) overlay.classList.remove('active');
+
+  // 2. Troca a tela na hora para dar feedback visual rápido (não espera a internet)
   bloquearSaida();
-};
+
+  try {
+    // 3. Pede para o Supabase sair. 
+    // Usamos um comando que força a limpeza local, mesmo se o servidor der erro.
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) throw error;
+  } catch (err) {
+    console.warn("Erro ao deslogar no servidor, forçando limpeza local...", err);
+    // Limpa o cache do navegador à força
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.reload(); // Recarrega a página para garantir a saída
+  }
+});
 
 async function verificarSessaoInicial() {
   // getSession é instantâneo e lê o cache seguro, não gera Rate Limit no Supabase
