@@ -236,9 +236,9 @@ const BANCOS = {
     mapping: { date: 1, desc: 2, amount: 3 }
   },
   "Banco do Brasil": {
-    bank_id: "001", type: "SPLIT_DATE",
-    regex_date: /^\s*(\d{2}\/\d{2}\/\d{4})\s*(.*)$/,
-    regex_amount: /^(.*?)\s+([\d\.,]+\s*\([\+\-]\))$/
+    bank_id: "001", type: "STANDARD", date_format: "AUTO",
+    regex: /^\s*(\d{2}\/\d{2}\/\d{4})\s+(.*?)\s+([\d\.,]+\s*\([\+\-]\))\s*$/,
+    mapping: { date: 1, desc: 2, amount: 3 }
   },
   "Banrisul": {
     bank_id: "041", type: "STANDARD", date_format: "INHERIT",
@@ -407,7 +407,7 @@ async function processText(text, bankConfig) {
 
   const IGNORAR = [
     "SALDO", "TOTAL", "HISTÓRICO", "HISTORICO", "DATA", "PÁGINA", "PAGINA", "SICOOB", "SICREDI", "OUVIDORIA",
-    "LOTE", "DOCUMENTO", "PERÍODO", "PERIODO", "NOME", "INSTITUIÇÃO", "DADOS DA CONTA",
+    "LOTE", "DOCUMENTO", "PERÍODO", "PERIODO", "NOME", "INSTITUIÇÃO", "DADOS DA CONTA", "LANÇAMENTOS", "CLIENTE",
     "CONTRAPARTE", "TIPO", "DESCRIÇÃO", "DESCRICAO", "VALOR", "EXTRATO", "EMITIDO",
     "STONE", "AGÊNCIA", "AGENCIA", "CONTA", "DETALHE DOS", "ID DA", "ASSOCIADO", "COOPERATIVA",
     "DDAATTAA", "ENTRADAS", "SAIDAS", "SAÍDAS", "CPF", "CNPJ",
@@ -422,7 +422,7 @@ async function processText(text, bankConfig) {
     "INFORMACÕES", "CODIGO DA AUTENTICACAO", "SE NOSSO ATENDIMENTO", "DÚVIDAS", "DUVIDAS",
     "REGIÕES", "REGIOES", "ENVIE UM", "OUTRAS", "3004-", "0800", "VENCIMENTO",
     "ID. DOC", "ID.DOC", "ID DOC", "ID.", "COOPERATIVA 515", "UNICRED", "SISTEMA DE COOPERATIVAS",
-    "COOP.", "SISBR", "SISTEMA DE", "C6BANK", "C6 BANK", "LANÇAMENTO", "LANCAMENTO", "CONTÁBIL", "CONTABIL", "SAC 0800 724 7220"
+    "COOP.", "SISBR", "SISTEMA DE", "C6BANK", "C6 BANK", "LANÇAMENTO", "LANCAMENTO", "CONTÁBIL", "CONTABIL"
   ];
 
   function removerLoteDoc(texto) {
@@ -606,9 +606,8 @@ async function processText(text, bankConfig) {
             } else { currentTx.memo += ' ' + extra; }
           } else {
             // 🚀 BLINDAGEM MÁXIMA DE CABEÇALHO NA SALA DE ESPERA
-            // Ignora qualquer texto aleatório ANTES de encontrar a primeira transação financeira
-            // Adicionado 748 para blindar o Sicredi
-            if (bankConfig.bank_id === "197" || bankConfig.bank_id === "336" || bankConfig.bank_id === "041" || bankConfig.bank_id === "748") { 
+            // Adicionado 001 para blindar o Banco do Brasil contra o seu próprio cabeçalho
+            if (["197", "336", "041", "748", "001"].includes(bankConfig.bank_id)) { 
                 /* joga no lixo virtual */ 
             }
             else nextMemoBuffer += ' ' + extra;
