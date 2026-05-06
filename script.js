@@ -188,12 +188,18 @@ function iniciarMonitoramento() {
   }, 60000); // 10000ms = 10 segundos
 }
 
+// ==========================================
+// MONITOR DE SEGURANÇA E SESSÃO
+// ==========================================
 async function verificarSessaoInicial() {
   const { data: { session } } = await supabaseClient.auth.getSession();
 
   if (session) {
     const aindaExiste = await validarUsuarioNoServidor();
     if (aindaExiste) {
+      // 🚀 CORREÇÃO AQUI: Puxa os limites do banco antes de liberar a interface
+      await verificarAcessoEPlano();
+
       permitirEntrada();
       iniciarMonitoramento(); // Começa a vigiar o status
     }
@@ -203,14 +209,22 @@ async function verificarSessaoInicial() {
 }
 
 // Atualiza o monitoramento quando o estado muda
-supabaseClient.auth.onAuthStateChange((event, session) => {
+supabaseClient.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_IN') {
+    // 🚀 GARANTIA: Atualiza os limites na hora do login
+    await verificarAcessoEPlano();
+
     iniciarMonitoramento();
     permitirEntrada();
   }
   if (event === 'SIGNED_OUT') {
     clearInterval(monitorAcesso);
     bloquearSaida();
+  }
+  if (event === 'PASSWORD_RECOVERY') {
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display = 'block';
+    navegarPara('view-update-password');
   }
 });
 
@@ -658,11 +672,26 @@ function showResult(type, icon, title, bodyHTML) {
 
 document.getElementById('btn-convert').addEventListener('click', async () => {
   if (!selectedBank || !selectedFile) return;
-  const cfg = BANCOS[selectedBank];
+
+  // =========================================================
+  // 🛡️ TRAVA DE SEGURANÇA MÁXIMA (Double-check no Servidor)
+  // Verifica em tempo real se o usuário ainda tem limite antes de processar o PDF
+  // =========================================================
   const btn = document.getElementById('btn-convert');
+  btn.disabled = true;
+  btn.innerText = "Verificando limites...";
+
+  const podeConverter = await verificarAcessoEPlano();
+
+  if (!podeConverter) {
+    // Se a função retornar false, a própria função já atualiza a tela para o card vermelho
+    return; // Para a execução imediatamente!
+  }
+  // =========================================================
+
+  const cfg = BANCOS[selectedBank];
   const progressWrap = document.getElementById('progress-wrap');
 
-  btn.disabled = true;
   progressWrap.classList.add('visible');
   document.getElementById('result-card').className = 'result-card';
   setProgress(0, 'Lendo PDF...');
