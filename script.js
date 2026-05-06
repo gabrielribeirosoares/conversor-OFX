@@ -205,15 +205,22 @@ async function verificarSessaoInicial() {
   }
 }
 
-// Atualiza o monitoramento quando o estado muda
-supabaseClient.auth.onAuthStateChange((event, session) => {
+supabaseClient.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_IN') {
+    // 🚀 GARANTIA: Atualiza os limites na hora do login
+    await verificarAcessoEPlano();
+    
     iniciarMonitoramento();
     permitirEntrada();
   }
   if (event === 'SIGNED_OUT') {
     clearInterval(monitorAcesso);
     bloquearSaida();
+  }
+  if (event === 'PASSWORD_RECOVERY') {
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display = 'block';
+    navegarPara('view-update-password');
   }
 });
 
