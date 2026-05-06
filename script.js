@@ -822,7 +822,21 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
   btn.innerText = "Verificando limites...";
 
   const podeConverter = await verificarAcessoEPlano();
-  if (!podeConverter) return;
+
+  if (!podeConverter) {
+    // Se a função retornou FALSO mas o botão não mudou para "Limite Atingido",
+    // significa que foi uma falha de conexão ou bloqueio do Supabase!
+    if (btn.innerText === "Verificando limites...") {
+      btn.innerText = "Falha de Conexão";
+      alert("O Supabase bloqueou a leitura do seu perfil. Pressione F12 e veja a aba Console para ler o erro exato.");
+      setTimeout(() => updateConvertBtn(), 3000); // Destrava o botão após 3 seg
+    }
+    return;
+  }
+
+  // Se passou no limite, trava o botão no modo processamento
+  btn.disabled = true;
+  btn.innerText = "Processando arquivo...";
 
   const cfg = BANCOS[selectedBank];
   const progressWrap = document.getElementById('progress-wrap');
