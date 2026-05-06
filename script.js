@@ -420,7 +420,7 @@ async function processText(text, bankConfig) {
     "++", "OPERACAO", "O LIMITE", "QUANTIDADE", "BENEFICIOS", "TEB", "O SALDO DEVEDOR",
     "AG:", "CC:", "PAGAMENTO S.A", "INFORMAÇÕES DO COMPROVANTE", "CÓDIGO DA AUTENTICAÇÃO",
     "INFORMACÕES", "CODIGO DA AUTENTICACAO", "SE NOSSO ATENDIMENTO", "DÚVIDAS", "DUVIDAS",
-    "REGIÕES", "REGIOES", "ENVIE UM", "OUTRAS", "3004-", "0800", "VENCIMENTO",
+    "REGIÕES", "REGIOES", "ENVIE UM", "OUTRAS", "3004-", "0800",
     "ID. DOC", "ID.DOC", "ID DOC", "ID.", "COOPERATIVA 515", "UNICRED", "SISTEMA DE COOPERATIVAS",
     "COOP.", "SISBR", "SISTEMA DE", "C6BANK", "C6 BANK", "LANÇAMENTO", "LANCAMENTO", "CONTÁBIL", "CONTABIL"
   ];
@@ -468,6 +468,10 @@ async function processText(text, bankConfig) {
     const upper = linha.toUpperCase();
     let skip = IGNORAR.some(p => upper.startsWith(p));
 
+    if (!skip && /(ENCARGOS FINANCEIROS|TAXA DE JUROS|CUSTO EFETIVO|PARA GARANTIR|PREZADO CLIENTE|O BANRISUL INFORMA|ULTIMO DIA UTIL|SALDO DEVEDOR|TARIFA ECONOMICA|MOVIMENTOS DA CONTA|VALORES DISPONIVEIS)/i.test(linha)) {
+      skip = true;
+    }
+
     if (!skip && /Entradas:.*Sa[íi]das:/i.test(linha)) skip = true;
     if (!skip && /^(?:JANEIRO|FEVEREIRO|MAR[CÇ]O|ABRIL|MAIO|JUNHO|JULHO|AGOSTO|SETEMBRO|OUTUBRO|NOVEMBRO|DEZEMBRO)\s+20\d{2}/i.test(linha)) skip = true;
     if (!skip && (/I=PDF|U=NC|G=30/.test(upper))) skip = true;
@@ -508,8 +512,7 @@ async function processText(text, bankConfig) {
             } else { currentTx.memo += ' ' + linha; }
           } else { currentTx.memo += ' ' + linha; }
         } else {
-          // 🚀 BLINDAGEM UNICRED: Ignora todo o cabeçalho antes da primeira transação
-          // Não faz nada. Deixa o lixo sumir no espaço.
+          // Sala de espera do Unicred
         }
       }
     }
@@ -589,9 +592,12 @@ async function processText(text, bankConfig) {
         const extra = removerLoteDoc(linha);
         if (extra) {
           if (currentTx) {
+            // Se já achou transação, processa extras (linha 2 da descrição, etc)
             if (bankConfig.bank_id === "197") {
-              const lixo = ["STONE", "AG:", "CC:", "PAGAMENTO S.A", "INSTITUIÇ", "CONTRAPARTE"];
-              const trailing = ["PIX", "ANTECIPA", "TRANSFER", "MAQUININHA", "CARTÃO", "CARTAO", "CRÉDITO", "CREDITO", "DÉBITO", "DEBITO"];
+              const lixo = ["STONE", "AG:", "CC:", "PAGAMENTO S.A", "INSTITUIÇ", "CONTRAPARTE", "SALDO"];
+              // 🚀 NOVO: Adicionado Mastercard, Visa, etc. para colar a linha 2 da Stone!
+              const trailing = ["PIX", "ANTECIPA", "TRANSFER", "MAQUININHA", "CARTÃO", "CARTAO", "CRÉDITO", "CREDITO", "DÉBITO", "DEBITO", "MASTERCARD", "VISA", "ELO", "AMEX", "HIPER", "BOLETO"];
+
               if (lixo.some(c => extra.toUpperCase().includes(c))) { /* skip */ }
               else if (trailing.some(t => extra.toUpperCase().includes(t))) currentTx.memo += ' ' + extra;
               else nextMemoBuffer += ' ' + extra;
@@ -601,9 +607,11 @@ async function processText(text, bankConfig) {
               else currentTx.memo += ' ' + extra;
             } else { currentTx.memo += ' ' + extra; }
           } else {
-            if (bankConfig.bank_id === "197" && ["STONE", "AG:", "CC:", "PAGAMENTO S.A", "INSTITUIÇ", "CONTRAPARTE"].some(c => extra.toUpperCase().includes(c))) { /* skip */ }
-            // 🚀 BLINDAGEM BANRISUL E C6: Joga fora o cabeçalho na sala de espera
-            else if (bankConfig.bank_id === "336" || bankConfig.bank_id === "041") { /* skip */ }
+            // 🚀 BLINDAGEM MÁXIMA DE CABEÇALHO NA SALA DE ESPERA
+            // Ignora qualquer texto aleatório ANTES de encontrar a primeira transação financeira
+            if (bankConfig.bank_id === "197" || bankConfig.bank_id === "336" || bankConfig.bank_id === "041") {
+              /* joga no lixo virtual */
+            }
             else nextMemoBuffer += ' ' + extra;
           }
         }
