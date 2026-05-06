@@ -326,82 +326,103 @@ document.getElementById('btn-subscribe-fixed').addEventListener('click', () => {
 });
 
 async function verificarAcessoEPlano() {
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  if (!session) return false;
+  try {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) return false;
 
-  const { data: profile, error } = await supabaseClient
-    .from('profiles')
-    .select('plan_status, conversion_limit, conversions_used, last_conversion_date')
-    .eq('id', session.user.id)
-    .single();
+    const { data: profile, error } = await supabaseClient
+      .from('profiles')
+      .select('plan_status, conversion_limit, conversions_used, last_conversion_date')
+      .eq('id', session.user.id)
+      .single();
 
-  if (error || !profile) {
-    console.error("ERRO AO LER O BANCO (Verifique o RLS do SELECT):", error);
+    // TRAVA 1: Erro de permissão no Supabase (RLS)
+    if (error) {
+      console.error("ERRO DO SUPABASE:", error);
+      alert("Erro no banco de dados (RLS): " + error.message);
+      return false;
+    }
+
+    // TRAVA 2: Perfil deletado ou inexistente
+    if (!profile) {
+      alert("O seu perfil não foi encontrado no banco de dados!");
+      return false;
+    }
+
+    const infoTexto = document.getElementById('trial-info');
+    const bannerBloqueio = document.getElementById('subscription-banner'); 
+    const cardFixoCompra = document.getElementById('fixed-subscription-card'); 
+    const btnConverter = document.getElementById('btn-convert');
+    const tagAssinatura = document.querySelector('.tag');
+
+    const hoje = new Date().toISOString().split('T')[0];
+
+    // Lógica para Assinante Ativo
+    if (profile.plan_status === 'active') {
+      if (infoTexto) infoTexto.innerHTML = "✨ <strong>Plano Profissional Ativo</strong> (Ilimitado)";
+      if (bannerBloqueio) bannerBloqueio.style.display = 'none';
+      if (cardFixoCompra) cardFixoCompra.style.display = 'none';
+      if (tagAssinatura) {
+        tagAssinatura.textContent = "Assinatura Profissional";
+        tagAssinatura.style.background = "var(--accent)";
+      }
+      
+      // Restaura o botão e garante que mude o texto de volta se for válido
+      btnConverter.disabled = !(selectedBank && selectedFile);
+      if (!btnConverter.disabled) btnConverter.innerText = "Converter para OFX";
+      return true;
+    }
+
+    // Lógica para Plano Gratuito
+    let usoAtual = profile.conversions_used || 0;
+    if (!profile.last_conversion_date || profile.last_conversion_date < hoje) {
+      usoAtual = 0;
+    }
+
+    const limite = profile.conversion_limit || 3;
+    const resta = limite - usoAtual;
+
+    const agora = new Date();
+    const amanha = new Date();
+    amanha.setHours(24, 0, 0, 0);
+    const horasParaReset = Math.floor((amanha - agora) / (1000 * 60 * 60));
+
+    if (usoAtual >= limite) {
+      if (bannerBloqueio) bannerBloqueio.style.display = 'block';
+      if (cardFixoCompra) cardFixoCompra.style.display = 'none';
+
+      btnConverter.disabled = true;
+      btnConverter.innerText = "Limite Diário Atingido";
+      btnConverter.style.opacity = "0.5";
+
+      if (infoTexto) infoTexto.innerHTML = `Limite atingido! Reset em <strong>${horasParaReset} horas</strong>.`;
+      if (tagAssinatura) {
+        tagAssinatura.textContent = "Limite Atingido";
+        tagAssinatura.style.background = "var(--accent2)";
+      }
+      return false;
+    } else {
+      if (bannerBloqueio) bannerBloqueio.style.display = 'none';
+      if (cardFixoCompra) cardFixoCompra.style.display = 'block';
+
+      btnConverter.disabled = !(selectedBank && selectedFile);
+      if (!btnConverter.disabled) {
+        btnConverter.innerText = "Converter para OFX";
+        btnConverter.style.opacity = "1";
+      }
+
+      if (infoTexto) infoTexto.innerHTML = `🎁 Você tem <strong>${resta}</strong> conversões grátis hoje. Reset em ${horasParaReset}h.`;
+      if (tagAssinatura) {
+        tagAssinatura.textContent = "Plano Gratuito";
+        tagAssinatura.style.background = "#555";
+      }
+      return true;
+    }
+  } catch (erroFatal) {
+    // TRAVA 3: Erro fatal no Javascript
+    console.error("ERRO FATAL NA VERIFICAÇÃO:", erroFatal);
+    alert("Erro Javascript: " + erroFatal.message);
     return false;
-  }
-
-  const infoTexto = document.getElementById('trial-info');
-  const bannerBloqueio = document.getElementById('subscription-banner');
-  const cardFixoCompra = document.getElementById('fixed-subscription-card');
-  const btnConverter = document.getElementById('btn-convert');
-  const tagAssinatura = document.querySelector('.tag');
-
-  const hoje = new Date().toISOString().split('T')[0];
-
-  if (profile.plan_status === 'active') {
-    if (infoTexto) infoTexto.innerHTML = "✨ <strong>Plano Profissional Ativo</strong> (Ilimitado)";
-    if (bannerBloqueio) bannerBloqueio.style.display = 'none';
-    if (cardFixoCompra) cardFixoCompra.style.display = 'none';
-    if (tagAssinatura) {
-      tagAssinatura.textContent = "Assinatura Profissional";
-      tagAssinatura.style.background = "var(--accent)";
-    }
-    btnConverter.disabled = !(selectedBank && selectedFile);
-    btnConverter.innerText = "Converter para OFX";
-    return true;
-  }
-
-  let usoAtual = profile.conversions_used || 0;
-  if (!profile.last_conversion_date || profile.last_conversion_date < hoje) {
-    usoAtual = 0;
-  }
-
-  const limite = profile.conversion_limit || 3;
-  const resta = limite - usoAtual;
-
-  const agora = new Date();
-  const amanha = new Date();
-  amanha.setHours(24, 0, 0, 0);
-  const horasParaReset = Math.floor((amanha - agora) / (1000 * 60 * 60));
-
-  if (usoAtual >= limite) {
-    if (bannerBloqueio) bannerBloqueio.style.display = 'block';
-    if (cardFixoCompra) cardFixoCompra.style.display = 'none';
-
-    btnConverter.disabled = true;
-    btnConverter.innerText = "Limite Diário Atingido";
-    btnConverter.style.opacity = "0.5";
-
-    if (infoTexto) infoTexto.innerHTML = `Limite atingido! Reset em <strong>${horasParaReset} horas</strong>.`;
-    if (tagAssinatura) {
-      tagAssinatura.textContent = "Limite Atingido";
-      tagAssinatura.style.background = "var(--accent2)";
-    }
-    return false;
-  } else {
-    if (bannerBloqueio) bannerBloqueio.style.display = 'none';
-    if (cardFixoCompra) cardFixoCompra.style.display = 'block';
-
-    btnConverter.disabled = !(selectedBank && selectedFile);
-    btnConverter.innerText = "Converter para OFX";
-    btnConverter.style.opacity = "1";
-
-    if (infoTexto) infoTexto.innerHTML = `🎁 Você tem <strong>${resta}</strong> conversões grátis hoje. Reset em ${horasParaReset}h.`;
-    if (tagAssinatura) {
-      tagAssinatura.textContent = "Plano Gratuito";
-      tagAssinatura.style.background = "#555";
-    }
-    return true;
   }
 }
 
