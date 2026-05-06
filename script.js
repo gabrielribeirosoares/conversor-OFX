@@ -194,9 +194,6 @@ async function verificarSessaoInicial() {
   if (session) {
     const aindaExiste = await validarUsuarioNoServidor();
     if (aindaExiste) {
-      // 🚀 CORREÇÃO AQUI: Puxa os limites do banco antes de liberar a interface
-      await verificarAcessoEPlano();
-      
       permitirEntrada();
       iniciarMonitoramento(); // Começa a vigiar o status
     }
@@ -206,22 +203,14 @@ async function verificarSessaoInicial() {
 }
 
 // Atualiza o monitoramento quando o estado muda
-supabaseClient.auth.onAuthStateChange(async (event, session) => {
+supabaseClient.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_IN') {
-    // 🚀 GARANTIA: Atualiza os limites na hora do login
-    await verificarAcessoEPlano();
-    
     iniciarMonitoramento();
     permitirEntrada();
   }
   if (event === 'SIGNED_OUT') {
     clearInterval(monitorAcesso);
     bloquearSaida();
-  }
-  if (event === 'PASSWORD_RECOVERY') {
-    document.getElementById('auth-screen').style.display = 'none';
-    document.getElementById('app-screen').style.display = 'block';
-    navegarPara('view-update-password');
   }
 });
 
@@ -330,13 +319,13 @@ dropZone.addEventListener('drop', e => {
 
 function updateConvertBtn() {
   const btn = document.getElementById('btn-convert');
-
+  
   // TRAVA DE SEGURANÇA: Se o botão já estiver avisando do limite, ele não pode ser reativado de jeito nenhum!
   if (btn.innerText.includes("Limite")) {
     btn.disabled = true;
     return;
   }
-
+  
   btn.disabled = !(selectedBank && selectedFile);
 }
 
@@ -775,7 +764,7 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
       `<p style="color:var(--muted);font-size:13px;font-family:var(--font-mono)">${err.message}</p>`);
   }
 
-  updateConvertBtn();
+  btn.disabled = false;
 });
 
 // Restaurando a função de Gerar OFX que foi cortada na sua mensagem original:
