@@ -1,10 +1,7 @@
 const SUPABASE_URL = 'https://ewawtckqvicvfuwrasel.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_02GmlN7B5mkkavp8mrjoIg_3Hdhnkud';
-
-// Usamos um nome único para evitar o erro "already declared"
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Referências da Interface
 const authScreen = document.getElementById('auth-screen');
 const appScreen = document.getElementById('app-screen');
 const loginForm = document.getElementById('login-form');
@@ -1101,3 +1098,4 @@ document.getElementById('btn-save-new-password').onclick = async () => {
       navegarPara('view-converter');
     }, 2000);
   }
+  };
