@@ -18,7 +18,7 @@ function traduzirErro(mensagemOriginal) {
 
   if (msg.includes('password should contain')) return 'A senha deve conter letras e números.';
   if (msg.includes('at least 6 characters')) return 'A senha deve ter pelo menos 6 caracteres.';
-  if (msg.includes('already registered')) return 'Este e-mail já está registrado.';
+  if (msg.includes('already registered')) return 'Este e-mail já está registado.';
   if (msg.includes('invalid login credentials')) return 'E-mail ou senha incorretos.';
   if (msg.includes('rate limit')) return 'Muitas tentativas. Aguarde um momento.';
 
@@ -77,15 +77,7 @@ document.getElementById('btn-do-register').onclick = async () => {
     authError.textContent = 'Criando conta...';
 
     const { data, error } = await supabaseClient.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          first_name: firstName,
-          last_name: lastName,
-          office: office
-        }
-      }
+      email, password, options: { data: { first_name: firstName, last_name: lastName, office: office } }
     });
 
     if (error) {
@@ -104,7 +96,7 @@ document.getElementById('btn-do-register').onclick = async () => {
 };
 
 // ============================================================================
-// 2. LÓGICA DE LOGIN E SESSÃO (BLINDADA)
+// 2. LÓGICA DE LOGIN E SESSÃO BLINDADA
 // ============================================================================
 document.getElementById('btn-do-login').onclick = async () => {
   try {
@@ -128,7 +120,7 @@ document.getElementById('btn-do-login').onclick = async () => {
     } else {
       authError.textContent = '';
       permitirEntrada();
-      try { await verificarAcessoEPlano(); } catch (e) { }
+      try { await verificarAcessoEPlano(); } catch (e) {}
     }
   } catch (err) {
     authError.style.color = 'var(--accent2)';
@@ -136,50 +128,30 @@ document.getElementById('btn-do-login').onclick = async () => {
   }
 };
 
-// ============================================================================
-// BOTÃO DE SAIR (LOGOUT BLINDADO)
-// ============================================================================
+// Logout seguro (limpa cache se o servidor travar)
 document.getElementById('btn-logout').addEventListener('click', async () => {
-  // 1. Força o fechamento do menu lateral instantaneamente
   const sideMenu = document.getElementById('side-menu');
   const overlay = document.getElementById('sidebar-overlay');
   if (sideMenu) sideMenu.classList.remove('active');
   if (overlay) overlay.classList.remove('active');
 
-  // 2. Troca a tela na hora para dar feedback visual rápido (não espera a internet)
   bloquearSaida();
-
   try {
-    // 3. Pede para o Supabase sair. 
-    // Usamos um comando que força a limpeza local, mesmo se o servidor der erro.
-    const { error } = await supabaseClient.auth.signOut();
-    if (error) throw error;
+    await supabaseClient.auth.signOut();
   } catch (err) {
-    console.warn("Erro ao deslogar no servidor, forçando limpeza local...", err);
-    // Limpa o cache do navegador à força
     localStorage.clear();
     sessionStorage.clear();
-    window.location.reload(); // Recarrega a página para garantir a saída
+    window.location.reload();
   }
 });
 
-async function verificarSessaoInicial() {
-  // getSession é instantâneo e lê o cache seguro, não gera Rate Limit no Supabase
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  if (session) {
-    permitirEntrada();
-    try { await verificarAcessoEPlano(); } catch (e) { }
-  } else {
-    bloquearSaida();
-  }
-}
-
+// Listener Global de Sessão Unificado
 supabaseClient.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
     if (session) {
       permitirEntrada();
-      if (authError) authError.textContent = '';
-      try { await verificarAcessoEPlano(); } catch (e) { }
+      if (authError) authError.textContent = ''; 
+      try { await verificarAcessoEPlano(); } catch (e) {}
     }
   } else if (event === 'SIGNED_OUT') {
     bloquearSaida();
@@ -190,6 +162,15 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
   }
 });
 
+async function verificarSessaoInicial() {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session) {
+    permitirEntrada();
+    try { await verificarAcessoEPlano(); } catch (e) {}
+  } else {
+    bloquearSaida();
+  }
+}
 verificarSessaoInicial();
 
 // ============================================================================
@@ -201,21 +182,21 @@ document.getElementById('btn-reset-password').onclick = async () => {
   try {
     const { data: { session } } = await supabaseClient.auth.getSession();
     if (!session) return;
-
+    
     btn.disabled = true;
     btn.innerText = "Enviando...";
 
     const { error } = await supabaseClient.auth.resetPasswordForEmail(session.user.email, {
-      redirectTo: 'https://conversor-ofx-six.vercel.app/',
+      redirectTo: 'https://pdf-para-ofx.vercel.app/', 
     });
     if (error) throw error;
-
+    
     msg.style.color = "var(--accent)";
-    msg.textContent = "E-mail de redefinição enviado! Verifique sua caixa de entrada.";
+    msg.textContent = "E-mail de redefinição enviado!";
     btn.innerText = "E-mail Enviado";
   } catch (err) {
     msg.style.color = "var(--accent2)";
-    msg.textContent = "Erro ao enviar e-mail. Tente novamente mais tarde.";
+    msg.textContent = "Erro ao enviar e-mail.";
     btn.disabled = false;
     btn.innerText = "Tentar novamente";
   }
@@ -290,7 +271,7 @@ document.getElementById('menu-profile').onclick = async () => {
       document.getElementById('prof-status').textContent = profile.plan_status.toUpperCase();
     }
   }
-  navegarPara('view-profile');
+  navegarPara('view-profile'); 
 };
 
 document.getElementById('menu-limits').onclick = async () => {
@@ -312,7 +293,7 @@ document.getElementById('menu-about').onclick = () => navegarPara('view-about');
 
 
 // ============================================================================
-// 4. LIMITES E ASSINATURAS (STRIPE)
+// 4. VERIFICAÇÃO DE LIMITES COM ANTI-TRAVAMENTO (PROMISE RACE)
 // ============================================================================
 const stripe = Stripe('pk_test_51TReq2Fmh5VQuv7rVWKLHrpTf7JDfACfrwWbEVqS0ir9jhnsfWE3qoUjb5l378bD06zEhOpa80Bjuy7mJgsJiUMM00bIAKAYQp');
 
@@ -330,24 +311,20 @@ async function verificarAcessoEPlano() {
     const { data: { session } } = await supabaseClient.auth.getSession();
     if (!session) return false;
 
-    const { data: profile, error } = await supabaseClient
+    // Timer de 5 segundos contra bloqueadores (AdBlock/Brave)
+    const fetchProfile = supabaseClient
       .from('profiles')
       .select('plan_status, conversion_limit, conversions_used, last_conversion_date')
       .eq('id', session.user.id)
       .single();
 
-    // TRAVA 1: Erro de permissão no Supabase (RLS)
-    if (error) {
-      console.error("ERRO DO SUPABASE:", error);
-      alert("Erro no banco de dados (RLS): " + error.message);
-      return false;
-    }
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT_DB")), 5000));
+    
+    // Se o banco demorar mais de 5s, o código aborta e avisa o erro
+    const { data: profile, error } = await Promise.race([fetchProfile, timeout]);
 
-    // TRAVA 2: Perfil deletado ou inexistente
-    if (!profile) {
-      alert("O seu perfil não foi encontrado no banco de dados!");
-      return false;
-    }
+    if (error) throw error;
+    if (!profile) return false;
 
     const infoTexto = document.getElementById('trial-info');
     const bannerBloqueio = document.getElementById('subscription-banner'); 
@@ -357,7 +334,6 @@ async function verificarAcessoEPlano() {
 
     const hoje = new Date().toISOString().split('T')[0];
 
-    // Lógica para Assinante Ativo
     if (profile.plan_status === 'active') {
       if (infoTexto) infoTexto.innerHTML = "✨ <strong>Plano Profissional Ativo</strong> (Ilimitado)";
       if (bannerBloqueio) bannerBloqueio.style.display = 'none';
@@ -366,35 +342,30 @@ async function verificarAcessoEPlano() {
         tagAssinatura.textContent = "Assinatura Profissional";
         tagAssinatura.style.background = "var(--accent)";
       }
-      
-      // Restaura o botão e garante que mude o texto de volta se for válido
-      btnConverter.disabled = !(selectedBank && selectedFile);
-      if (!btnConverter.disabled) btnConverter.innerText = "Converter para OFX";
+      if (btnConverter && btnConverter.innerText !== "Processando...") {
+          btnConverter.disabled = !(selectedBank && selectedFile);
+          if (!btnConverter.disabled) btnConverter.innerText = "Converter para OFX";
+      }
       return true;
     }
 
-    // Lógica para Plano Gratuito
     let usoAtual = profile.conversions_used || 0;
-    if (!profile.last_conversion_date || profile.last_conversion_date < hoje) {
-      usoAtual = 0;
-    }
+    if (!profile.last_conversion_date || profile.last_conversion_date < hoje) usoAtual = 0;
 
     const limite = profile.conversion_limit || 3;
     const resta = limite - usoAtual;
-
     const agora = new Date();
-    const amanha = new Date();
-    amanha.setHours(24, 0, 0, 0);
-    const horasParaReset = Math.floor((amanha - agora) / (1000 * 60 * 60));
+    const amanha = new Date(); amanha.setHours(24, 0, 0, 0);
+    const horasParaReset = Math.floor((amanha - agora) / 3600000);
 
     if (usoAtual >= limite) {
       if (bannerBloqueio) bannerBloqueio.style.display = 'block';
       if (cardFixoCompra) cardFixoCompra.style.display = 'none';
-
-      btnConverter.disabled = true;
-      btnConverter.innerText = "Limite Diário Atingido";
-      btnConverter.style.opacity = "0.5";
-
+      if (btnConverter) {
+        btnConverter.disabled = true;
+        btnConverter.innerText = "Limite Diário Atingido";
+        btnConverter.style.opacity = "0.5";
+      }
       if (infoTexto) infoTexto.innerHTML = `Limite atingido! Reset em <strong>${horasParaReset} horas</strong>.`;
       if (tagAssinatura) {
         tagAssinatura.textContent = "Limite Atingido";
@@ -404,13 +375,13 @@ async function verificarAcessoEPlano() {
     } else {
       if (bannerBloqueio) bannerBloqueio.style.display = 'none';
       if (cardFixoCompra) cardFixoCompra.style.display = 'block';
-
-      btnConverter.disabled = !(selectedBank && selectedFile);
-      if (!btnConverter.disabled) {
-        btnConverter.innerText = "Converter para OFX";
-        btnConverter.style.opacity = "1";
+      if (btnConverter && btnConverter.innerText !== "Processando...") {
+        btnConverter.disabled = !(selectedBank && selectedFile);
+        if (!btnConverter.disabled) {
+          btnConverter.innerText = "Converter para OFX";
+          btnConverter.style.opacity = "1";
+        }
       }
-
       if (infoTexto) infoTexto.innerHTML = `🎁 Você tem <strong>${resta}</strong> conversões grátis hoje. Reset em ${horasParaReset}h.`;
       if (tagAssinatura) {
         tagAssinatura.textContent = "Plano Gratuito";
@@ -418,10 +389,10 @@ async function verificarAcessoEPlano() {
       }
       return true;
     }
-  } catch (erroFatal) {
-    // TRAVA 3: Erro fatal no Javascript
-    console.error("ERRO FATAL NA VERIFICAÇÃO:", erroFatal);
-    alert("Erro Javascript: " + erroFatal.message);
+  } catch (err) {
+    if (err.message === "TIMEOUT_DB") {
+      console.warn("Bloqueio detectado! Desligue o AdBlock ou o Escudo do Brave.");
+    }
     return false;
   }
 }
@@ -639,7 +610,7 @@ async function processText(text, bankConfig) {
     let memo = currentTx.memo.replace(/\(cid:\d+\)/g, ' ').replace(/\s+/g, ' ').trim();
 
     const upper = memo.toUpperCase();
-    if (["SALDO ANTERIOR", "SALDO DO DIA", "SALDO INICIAL", "SALDO NA DATA", "SALDO CALC", "SALDO BLOQUEADO"].some(s => upper.includes(s))) return;
+    if (["SALDO ANTERIOR", "SALDO DO DIA", "SALDO INICIAL", "SALDO NA DATA", "SALDO CALC"].some(s => upper.includes(s))) return;
 
     for (const p of ["PIX ", "Pix - Enviado", "Pix - Recebido", "Pix | ", "Pix "]) {
       if (memo.startsWith(p)) { memo = memo.slice(p.length).trim(); break; }
@@ -668,14 +639,10 @@ async function processText(text, bankConfig) {
 
     const upper = linha.toUpperCase();
     let skip = IGNORAR.some(p => upper.startsWith(p));
-
-    if (!skip && /Entradas:.*Sa[íi]das:/i.test(linha)) skip = true;
-    if (!skip && /^(?:JANEIRO|FEVEREIRO|MAR[CÇ]O|ABRIL|MAIO|JUNHO|JULHO|AGOSTO|SETEMBRO|OUTUBRO|NOVEMBRO|DEZEMBRO)\s+20\d{2}/i.test(linha)) skip = true;
     if (!skip && (/I=PDF|U=NC|G=30/.test(upper))) skip = true;
     if (!skip && /^[\+\-\s]+$/.test(linha)) skip = true;
     if (!skip && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(linha.toLowerCase())) skip = true;
     if (!skip && /^\s*\d{2}[-\/]\d{2}[-\/]\d{2,4}\s+(?:a|até|al|-)\s+\d{2}[-\/]\d{2}[-\/]\d{2,4}/i.test(linha)) skip = true;
-    if (!skip && /^\s*\d{2}\/\d{2}\/\d{4}\s+EXTRATO/i.test(linha)) skip = true;
     if (skip) continue;
 
     if (layout === "UNICRED") {
@@ -711,7 +678,6 @@ async function processText(text, bankConfig) {
         } else { nextMemoBuffer += ' ' + linha; }
       }
     }
-
     else if (layout === "SPLIT_DATE") {
       const mDate = linha.match(bankConfig.regex_date);
       if (mDate) {
@@ -738,7 +704,6 @@ async function processText(text, bankConfig) {
         if (extra) currentTx.memo += ' ' + extra;
       }
     }
-
     else if (layout === "STANDARD") {
       const match = linha.match(bankConfig.regex);
       if (match) {
@@ -756,12 +721,6 @@ async function processText(text, bankConfig) {
         const fmt = bankConfig.date_format;
         if (fmt === "DIA_MES") {
           dateStr = `${dateStr}/${currentYear}`;
-        } else if (fmt === "AUTO") {
-          if (dateStr.length <= 5) dateStr = `${dateStr}/${currentYear}`;
-          else if (dateStr.length === 8) {
-            const p = dateStr.split('/');
-            dateStr = `${p[0]}/${p[1]}/20${p[2]}`;
-          }
         } else if (fmt === "DIA_APENAS") {
           if (dateStr) lastDay = dateStr; else { if (!lastDay) continue; dateStr = lastDay; }
           dateStr = `${dateStr}/${currentMonth}/${currentYear}`;
@@ -797,7 +756,6 @@ async function processText(text, bankConfig) {
             } else { currentTx.memo += ' ' + extra; }
           } else {
             if (bankConfig.bank_id === "197" && ["STONE", "AG:", "CC:", "PAGAMENTO S.A", "INSTITUIÇ", "CONTRAPARTE"].some(c => extra.toUpperCase().includes(c))) { /* skip */ }
-            else if (bankConfig.bank_id === "336") { /* C6 Bank bloqueia ruído de cabeçalho na sala de espera */ }
             else nextMemoBuffer += ' ' + extra;
           }
         }
@@ -837,8 +795,18 @@ function downloadOFX(content, filename) {
   const blob = new Blob([content], { type: 'application/x-ofx' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
+
+  a.style.display = 'none';
+  a.href = url;
+  a.download = filename;
+
+  document.body.appendChild(a);
+  a.click(); 
+
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  }, 100);
 }
 
 function setProgress(pct, label) {
@@ -855,49 +823,46 @@ function showResult(type, icon, title, bodyHTML) {
 }
 
 // ============================================================================
-// BOTÃO PRINCIPAL DE CONVERSÃO
+// BOTÃO PRINCIPAL DE CONVERSÃO BLINDADO
 // ============================================================================
 document.getElementById('btn-convert').addEventListener('click', async () => {
   if (!selectedBank || !selectedFile) return;
 
   const btn = document.getElementById('btn-convert');
   btn.disabled = true;
-  btn.innerText = "Verificando limites...";
+  btn.innerText = "A verificar limites...";
 
-  const podeConverter = await verificarAcessoEPlano();
-
-  if (!podeConverter) {
-    // Se a função retornou FALSO mas o botão não mudou para "Limite Atingido",
-    // significa que foi uma falha de conexão ou bloqueio do Supabase!
-    if (btn.innerText === "Verificando limites...") {
-      btn.innerText = "Falha de Conexão";
-      alert("O Supabase bloqueou a leitura do seu perfil. Pressione F12 e veja a aba Console para ler o erro exato.");
-      setTimeout(() => updateConvertBtn(), 3000); // Destrava o botão após 3 seg
+  // Verifica o acesso chamando a função com timeout.
+  const acessoPermitido = await verificarAcessoEPlano();
+  
+  if (!acessoPermitido) {
+    // Se a função de verificação não conseguir mudar o texto (por ex: falha de rede/AdBlock), mudamos aqui
+    if (btn.innerText === "A verificar limites...") {
+        btn.innerText = "Falha de Conexão";
+        setTimeout(() => updateConvertBtn(), 3000);
     }
-    return;
+    return; // Para a execução
   }
 
-  // Se passou no limite, trava o botão no modo processamento
   btn.disabled = true;
-  btn.innerText = "Processando arquivo...";
-
+  btn.innerText = "Processando...";
   const cfg = BANCOS[selectedBank];
   const progressWrap = document.getElementById('progress-wrap');
 
   progressWrap.classList.add('visible');
   document.getElementById('result-card').className = 'result-card';
-  setProgress(0, 'Lendo PDF...');
+  setProgress(0, 'A ler PDF...');
 
   try {
     const text = await extractTextFromPDF(selectedFile, p => {
-      setProgress(p * 0.6, `Lendo página ${Math.round(p * 100)}%...`);
+      setProgress(p * 0.6, `A ler página ${Math.round(p * 100)}%...`);
     });
     lastPdfText = text;
-    setProgress(0.65, 'Processando transações...');
+    setProgress(0.65, 'A processar transações...');
 
     const txs = await processText(text, cfg);
     lastTransactions = txs;
-    setProgress(0.9, 'Gerando arquivo OFX...');
+    setProgress(0.9, 'A gerar ficheiro OFX...');
 
     if (txs.length === 0) {
       setProgress(1, 'Concluído');
@@ -908,35 +873,6 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
     } else {
       const ofxContent = generateOFX(txs, cfg.bank_id);
       setProgress(1, `${txs.length} transações processadas ✓`);
-
-      const { data: { session } } = await supabaseClient.auth.getSession();
-      if (session) {
-        const hoje = new Date().toISOString().split('T')[0];
-
-        const { data: profile } = await supabaseClient
-          .from('profiles')
-          .select('conversions_used, last_conversion_date, plan_status')
-          .eq('id', session.user.id)
-          .single();
-
-        if (profile) {
-          let novoUso = profile.conversions_used || 0;
-          if (!profile.last_conversion_date || profile.last_conversion_date < hoje) {
-            novoUso = 1;
-          } else {
-            novoUso += 1;
-          }
-
-          const { error: erroUpdate } = await supabaseClient.from('profiles').update({
-            conversions_used: novoUso,
-            last_conversion_date: hoje
-          }).eq('id', session.user.id);
-
-          if (typeof verificarAcessoEPlano === "function") {
-            await verificarAcessoEPlano();
-          }
-        }
-      }
 
       const credits = txs.filter(t => t.amount > 0);
       const debits = txs.filter(t => t.amount < 0);
@@ -962,13 +898,36 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
         <div class="tx-list" id="tx-list">${txListHTML}</div>
       `);
 
-      const btnDownload = document.getElementById('btn-dl');
-      btnDownload.addEventListener('click', function () {
-        downloadOFX(ofxContent, ofxName);
-        this.innerHTML = '✅ Download efetuado';
-        this.style.background = 'var(--accent)';
-        this.style.color = '#0d0f14';
-        this.style.fontWeight = '700';
+      // Lógica do botão de Download (com a sua verificação RPC de limite)
+      const btnDl = document.getElementById('btn-dl');
+      btnDl.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        btnDl.disabled = true;
+        btnDl.innerText = "A validar...";
+
+        // Usamos getSession em vez de getUser para não dar block do navegador
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (!session) return;
+
+        // SEU SISTEMA DE INCREMENTO VIA RPC (Excelente ideia!)
+        const { error: rpcError } = await supabaseClient.rpc('increment_conversion', { user_id: session.user.id });
+
+        if (!rpcError) {
+          // Atualiza a interface e bloqueia botões se atingiu 3
+          await verificarAcessoEPlano();
+
+          // Só agora entrega o arquivo
+          downloadOFX(ofxContent, ofxName);
+
+          btnDl.innerText = "Download Concluído";
+          btnDl.style.background = 'var(--accent)';
+          btnDl.style.color = '#0d0f14';
+        } else {
+          btnDl.disabled = false;
+          btnDl.innerText = "Erro ao validar. Tente novamente.";
+        }
       });
     }
   } catch (err) {
@@ -977,12 +936,11 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
       `<p style="color:var(--muted);font-size:13px;font-family:var(--font-mono)">${err.message}</p>`);
   }
 
+  // Devolve o botão ao normal
   updateConvertBtn();
-});
+}); 
 
-// ============================================================================
-// 6. MODAL DO RAIO-X
-// ============================================================================
+// ─── X-Ray Modal Lógica ───
 document.getElementById('btn-xray').addEventListener('click', async () => {
   const modal = document.getElementById('xray-modal');
   const xrayText = document.getElementById('xray-text');
@@ -998,7 +956,7 @@ document.getElementById('btn-xray').addEventListener('click', async () => {
     return;
   }
 
-  xrayText.textContent = 'Extraindo texto do PDF...';
+  xrayText.textContent = 'A extrair texto do PDF...';
   try {
     const text = await extractTextFromPDF(selectedFile, null);
     lastPdfText = text;
@@ -1008,10 +966,8 @@ document.getElementById('btn-xray').addEventListener('click', async () => {
   }
 });
 
-document.getElementById('modal-close').addEventListener('click', () => {
-  document.getElementById('xray-modal').classList.remove('visible');
-});
+const btnFecharModal = document.getElementById('modal-close');
+const modalRaioX = document.getElementById('xray-modal');
 
-document.getElementById('xray-modal').addEventListener('click', e => {
-  if (e.target === e.currentTarget) e.currentTarget.classList.remove('visible');
-});
+if (btnFecharModal) btnFecharModal.addEventListener('click', () => modalRaioX.classList.remove('visible'));
+if (modalRaioX) modalRaioX.addEventListener('click', (e) => { if (e.target === modalRaioX) modalRaioX.classList.remove('visible'); });
