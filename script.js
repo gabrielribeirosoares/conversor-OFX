@@ -431,7 +431,7 @@ async function processText(text, bankConfig) {
     let memo = currentTx.memo.replace(/\(cid:\d+\)/g, ' ').replace(/\s+/g, ' ').trim();
 
     const upper = memo.toUpperCase();
-    if (["SALDO ANTERIOR", "SALDO DO DIA", "SALDO INICIAL", "SALDO NA DATA", "SALDO CALC"].some(s => upper.includes(s))) return;
+    if (["SALDO ANTERIOR", "SALDO DO DIA", "SALDO INICIAL", "SALDO NA DATA", "SALDO CALC", "SALDO BLOQUEADO"].some(s => upper.includes(s))) return;
 
     for (const p of ["PIX ", "Pix - Enviado", "Pix - Recebido", "Pix | ", "Pix "]) {
       if (memo.startsWith(p)) { memo = memo.slice(p.length).trim(); break; }
@@ -460,10 +460,16 @@ async function processText(text, bankConfig) {
 
     const upper = linha.toUpperCase();
     let skip = IGNORAR.some(p => upper.startsWith(p));
+
+    // Pula resumo de Entradas/Saídas (C6 Bank) independentemente da seta
+    if (!skip && /Entradas:.*Sa[íi]das:/i.test(linha)) skip = true;
+
+    if (!skip && /^(?:JANEIRO|FEVEREIRO|MAR[CÇ]O|ABRIL|MAIO|JUNHO|JULHO|AGOSTO|SETEMBRO|OUTUBRO|NOVEMBRO|DEZEMBRO)\s+20\d{2}/i.test(linha)) skip = true;
     if (!skip && (/I=PDF|U=NC|G=30/.test(upper))) skip = true;
     if (!skip && /^[\+\-\s]+$/.test(linha)) skip = true;
     if (!skip && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(linha.toLowerCase())) skip = true;
     if (!skip && /^\s*\d{2}[-\/]\d{2}[-\/]\d{2,4}\s+(?:a|até|al|-)\s+\d{2}[-\/]\d{2}[-\/]\d{2,4}/i.test(linha)) skip = true;
+    if (!skip && /^\s*\d{2}\/\d{2}\/\d{4}\s+EXTRATO/i.test(linha)) skip = true;
     if (skip) continue;
 
     if (layout === "UNICRED") {
@@ -499,6 +505,7 @@ async function processText(text, bankConfig) {
         } else { nextMemoBuffer += ' ' + linha; }
       }
     }
+
     else if (layout === "SPLIT_DATE") {
       const mDate = linha.match(bankConfig.regex_date);
       if (mDate) {
@@ -525,6 +532,7 @@ async function processText(text, bankConfig) {
         if (extra) currentTx.memo += ' ' + extra;
       }
     }
+
     else if (layout === "STANDARD") {
       const match = linha.match(bankConfig.regex);
       if (match) {
@@ -542,6 +550,12 @@ async function processText(text, bankConfig) {
         const fmt = bankConfig.date_format;
         if (fmt === "DIA_MES") {
           dateStr = `${dateStr}/${currentYear}`;
+        } else if (fmt === "AUTO") {
+          if (dateStr.length <= 5) dateStr = `${dateStr}/${currentYear}`;
+          else if (dateStr.length === 8) {
+            const p = dateStr.split('/');
+            dateStr = `${p[0]}/${p[1]}/20${p[2]}`;
+          }
         } else if (fmt === "DIA_APENAS") {
           if (dateStr) lastDay = dateStr; else { if (!lastDay) continue; dateStr = lastDay; }
           dateStr = `${dateStr}/${currentMonth}/${currentYear}`;
@@ -577,6 +591,7 @@ async function processText(text, bankConfig) {
             } else { currentTx.memo += ' ' + extra; }
           } else {
             if (bankConfig.bank_id === "197" && ["STONE", "AG:", "CC:", "PAGAMENTO S.A", "INSTITUIÇ", "CONTRAPARTE"].some(c => extra.toUpperCase().includes(c))) { /* skip */ }
+            else if (bankConfig.bank_id === "336") { /* C6 Bank bloqueia ruído de cabeçalho na sala de espera */ }
             else nextMemoBuffer += ' ' + extra;
           }
         }
@@ -589,7 +604,6 @@ async function processText(text, bankConfig) {
   return transactions;
 }
 
-// ─── OFX generator ───
 function generateOFX(transactions, bankId) {
   const now = new Date();
   const ts = now.getFullYear().toString() +
@@ -617,19 +631,8 @@ function downloadOFX(content, filename) {
   const blob = new Blob([content], { type: 'application/x-ofx' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-
-  a.style.display = 'none';
-  a.href = url;
-  a.download = filename;
-
-  document.body.appendChild(a);
-  a.click(); // Dispara o download
-
-  // Limpeza para evitar vazamento de memória e refresh
-  setTimeout(() => {
-    URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-  }, 100);
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
 }
 
 function setProgress(pct, label) {
@@ -646,24 +649,6 @@ function showResult(type, icon, title, bodyHTML) {
 }
 
 document.getElementById('btn-convert').addEventListener('click', async () => {
-
-  // TRAVA 1: Verifica o acesso antes de qualquer outra ação
-  const acessoPermitido = await verificarAcessoEPlano();
-  if (!acessoPermitido) {
-    // Se a função retornar false, ela já ativou o banner e mudou o texto do botão.
-    // Paramos a execução aqui para não gastar recursos ou processar o PDF.
-    return;
-  }
-
-  const { data: { user }, error } = await supabaseClient.auth.getUser();
-
-  if (error || !user) {
-    alert("A sua conta não está mais ativa. Será redirecionado.");
-    await supabaseClient.auth.signOut();
-    location.reload();
-    return;
-  }
-
   if (!selectedBank || !selectedFile) return;
   const cfg = BANCOS[selectedBank];
   const btn = document.getElementById('btn-convert');
@@ -672,18 +657,18 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
   btn.disabled = true;
   progressWrap.classList.add('visible');
   document.getElementById('result-card').className = 'result-card';
-  setProgress(0, 'A ler PDF...');
+  setProgress(0, 'Lendo PDF...');
 
   try {
     const text = await extractTextFromPDF(selectedFile, p => {
-      setProgress(p * 0.6, `A ler página ${Math.round(p * 100)}%...`);
+      setProgress(p * 0.6, `Lendo página ${Math.round(p * 100)}%...`);
     });
     lastPdfText = text;
-    setProgress(0.65, 'A processar transações...');
+    setProgress(0.65, 'Processando transações...');
 
     const txs = await processText(text, cfg);
     lastTransactions = txs;
-    setProgress(0.9, 'A gerar ficheiro OFX...');
+    setProgress(0.9, 'Gerando arquivo OFX...');
 
     if (txs.length === 0) {
       setProgress(1, 'Concluído');
@@ -719,33 +704,7 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
         <div class="tx-list" id="tx-list">${txListHTML}</div>
       `);
 
-      // Localize onde o botão de download é configurado (dentro da lógica de sucesso)
-      const btnDl = document.getElementById('btn-dl');
-      btnDl.addEventListener('click', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        btnDl.disabled = true;
-        btnDl.innerText = "Validando...";
-
-        const { data: { user } } = await supabaseClient.auth.getUser();
-
-        // PRIMEIRO: Incrementa no banco
-        const { error: rpcError } = await supabaseClient.rpc('increment_conversion', { user_id: user.id });
-
-        if (!rpcError) {
-          // SEGUNDO: Atualiza a interface e bloqueia botões se atingiu 3
-          await verificarAcessoEPlano();
-
-          // TERCEIRO: Só agora entrega o arquivo
-          downloadOFX(ofxContent, ofxName);
-
-          btnDl.innerText = "Download Concluído";
-        } else {
-          btnDl.disabled = false;
-          btnDl.innerText = "Erro ao validar. Tente novamente.";
-        }
-      });
+      document.getElementById('btn-dl').addEventListener('click', () => downloadOFX(ofxContent, ofxName));
     }
   } catch (err) {
     setProgress(0, '');
@@ -753,13 +712,9 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
       `<p style="color:var(--muted);font-size:13px;font-family:var(--font-mono)">${err.message}</p>`);
   }
 
-  // Garante que o botão de "Converter" (o principal) volte ao estado normal
-  // mas a função verificarAcessoEPlano() lá de cima vai bloqueá-lo se o limite deu 3
   btn.disabled = false;
-  progressWrap.classList.remove('visible');
-}); // Fim do btn-convert
+});
 
-// ─── X-Ray Modal Lógica ───
 document.getElementById('btn-xray').addEventListener('click', async () => {
   const modal = document.getElementById('xray-modal');
   const xrayText = document.getElementById('xray-text');
@@ -775,7 +730,7 @@ document.getElementById('btn-xray').addEventListener('click', async () => {
     return;
   }
 
-  xrayText.textContent = 'A extrair texto do PDF...';
+  xrayText.textContent = 'Extraindo texto do PDF...';
   try {
     const text = await extractTextFromPDF(selectedFile, null);
     lastPdfText = text;
@@ -783,6 +738,13 @@ document.getElementById('btn-xray').addEventListener('click', async () => {
   } catch (e) {
     xrayText.textContent = 'Erro ao ler PDF: ' + e.message;
   }
+});
+
+document.getElementById('modal-close').addEventListener('click', () => {
+  document.getElementById('xray-modal').classList.remove('visible');
+});
+document.getElementById('xray-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('visible');
 });
 
 const btnFecharModal = document.getElementById('modal-close');
