@@ -118,12 +118,7 @@ document.getElementById('btn-do-register').onclick = async () => {
   }
 };
 
-// ============================================================================
-// 3. LÓGICA DE LOGIN
-// ============================================================================
-// ============================================================================
-// 3. LÓGICA DE LOGIN
-// ============================================================================
+
 document.getElementById('btn-do-login').onclick = async () => {
   try {
     const email = document.getElementById('login-email').value.trim();
@@ -138,14 +133,25 @@ document.getElementById('btn-do-login').onclick = async () => {
     authError.style.color = 'var(--text)';
     authError.textContent = 'Acessando...';
 
-    const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    // Dispara a tentativa de login
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
     if (error) {
       authError.style.color = 'var(--accent2)';
       authError.textContent = traduzirErro(error.message);
+    } else {
+      // SUCESSO! Libera o acesso instantaneamente aqui, sem esperar o fiscal de fundo
+      authError.textContent = '';
+      
+      try {
+        await verificarAcessoEPlano();
+      } catch (e) {
+        console.error("Erro ao puxar limites no login:", e);
+      }
+      
+      permitirEntrada();
+      iniciarMonitoramento();
     }
-    // Removemos a ordem de "abrir a tela" daqui. 
-    // Quem libera o acesso agora é o onAuthStateChange logo abaixo.
 
   } catch (err) {
     console.error("Erro no login:", err);
