@@ -658,3 +658,25 @@ h1 {
 .sidebar-overlay.active {
   display: block;
 }
+
+.legal-consent {
+  margin: 12px 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.legal-checkbox {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.legal-checkbox input {
+  margin-top: 3px;
+}
+
+.legal-checkbox a {
+  color: var(--accent);
+  text-decoration: underline;
+}

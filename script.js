@@ -1,7 +1,10 @@
 const SUPABASE_URL = 'https://ewawtckqvicvfuwrasel.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_02GmlN7B5mkkavp8mrjoIg_3Hdhnkud';
+
+// Usamos um nome único para evitar o erro "already declared"
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// Referências da Interface
 const authScreen = document.getElementById('auth-screen');
 const appScreen = document.getElementById('app-screen');
 const loginForm = document.getElementById('login-form');
@@ -60,6 +63,7 @@ document.getElementById('btn-do-register').onclick = async () => {
     const office = document.getElementById('reg-office').value.trim();
     const email = document.getElementById('reg-email').value.trim();
     const password = document.getElementById('reg-password').value.trim();
+    const aceitouTermos = document.getElementById('reg-accept-terms').checked;
 
     // 1. VALIDAÇÃO: Verifica se algum campo está vazio
     if (!firstName || !lastName || !office || !email || !password) {
@@ -78,6 +82,12 @@ document.getElementById('btn-do-register').onclick = async () => {
     if (password.length < 6) {
       authError.style.color = 'var(--accent2)';
       authError.textContent = 'A senha deve ter pelo menos 6 caracteres.';
+      return;
+    }
+
+    if (!aceitouTermos) {
+      authError.style.color = 'var(--accent2)';
+      authError.textContent = 'Você precisa aceitar os Termos de Uso e a LGPD para criar a conta.';
       return;
     }
 
@@ -106,6 +116,7 @@ document.getElementById('btn-do-register').onclick = async () => {
       authError.textContent = 'Conta criada com sucesso! Já pode fazer login.';
       // Limpa os campos após o sucesso
       registerForm.querySelectorAll('input').forEach(input => input.value = '');
+      document.getElementById('reg-accept-terms').checked = false;
       setTimeout(() => document.getElementById('go-to-login').click(), 2500);
     }
   } catch (err) {
@@ -848,6 +859,15 @@ async function verificarAcessoEPlano() {
   let usoAtual = profile.conversions_used || 0;
   if (!profile.last_conversion_date || profile.last_conversion_date < hoje) {
     usoAtual = 0;
+
+    const { error: resetError } = await supabaseClient
+      .from('profiles')
+      .update({ conversions_used: 0, last_conversion_date: hoje })
+      .eq('id', user.id);
+
+    if (resetError) {
+      console.warn('Não foi possível sincronizar o reset diário:', resetError.message);
+    }
   }
 
   const limite = profile.conversion_limit || 3;
@@ -1098,4 +1118,4 @@ document.getElementById('btn-save-new-password').onclick = async () => {
       navegarPara('view-converter');
     }, 2000);
   }
-  };
+};
