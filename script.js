@@ -739,7 +739,16 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
         <div class="tx-list" id="tx-list">${txListHTML}</div>
       `);
 
-      document.getElementById('btn-dl').addEventListener('click', () => downloadOFX(ofxContent, ofxName));
+      const btnDownload = document.getElementById('btn-dl');
+      btnDownload.addEventListener('click', function () {
+        downloadOFX(ofxContent, ofxName);
+
+        // Feedback visual de sucesso
+        this.innerHTML = '✅ Download efetuado';
+        this.style.background = 'var(--accent)';
+        this.style.color = '#0d0f14';
+        this.style.fontWeight = '700';
+      });
     }
   } catch (err) {
     setProgress(0, '');
