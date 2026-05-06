@@ -128,7 +128,7 @@ document.getElementById('btn-do-login').onclick = async () => {
     } else {
       authError.textContent = '';
       permitirEntrada();
-      try { await verificarAcessoEPlano(); } catch (e) {}
+      try { await verificarAcessoEPlano(); } catch (e) { }
     }
   } catch (err) {
     authError.style.color = 'var(--accent2)';
@@ -146,7 +146,7 @@ async function verificarSessaoInicial() {
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session) {
     permitirEntrada();
-    try { await verificarAcessoEPlano(); } catch (e) {}
+    try { await verificarAcessoEPlano(); } catch (e) { }
   } else {
     bloquearSaida();
   }
@@ -156,8 +156,8 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
     if (session) {
       permitirEntrada();
-      if (authError) authError.textContent = ''; 
-      try { await verificarAcessoEPlano(); } catch (e) {}
+      if (authError) authError.textContent = '';
+      try { await verificarAcessoEPlano(); } catch (e) { }
     }
   } else if (event === 'SIGNED_OUT') {
     bloquearSaida();
@@ -179,15 +179,15 @@ document.getElementById('btn-reset-password').onclick = async () => {
   try {
     const { data: { session } } = await supabaseClient.auth.getSession();
     if (!session) return;
-    
+
     btn.disabled = true;
     btn.innerText = "Enviando...";
 
     const { error } = await supabaseClient.auth.resetPasswordForEmail(session.user.email, {
-      redirectTo: 'https://conversor-ofx-six.vercel.app/', 
+      redirectTo: 'https://conversor-ofx-six.vercel.app/',
     });
     if (error) throw error;
-    
+
     msg.style.color = "var(--accent)";
     msg.textContent = "E-mail de redefinição enviado! Verifique sua caixa de entrada.";
     btn.innerText = "E-mail Enviado";
@@ -268,7 +268,7 @@ document.getElementById('menu-profile').onclick = async () => {
       document.getElementById('prof-status').textContent = profile.plan_status.toUpperCase();
     }
   }
-  navegarPara('view-profile'); 
+  navegarPara('view-profile');
 };
 
 document.getElementById('menu-limits').onclick = async () => {
@@ -313,11 +313,14 @@ async function verificarAcessoEPlano() {
     .eq('id', session.user.id)
     .single();
 
-  if (error || !profile) return false;
+  if (error || !profile) {
+    console.error("ERRO AO LER O BANCO (Verifique o RLS do SELECT):", error);
+    return false;
+  }
 
   const infoTexto = document.getElementById('trial-info');
-  const bannerBloqueio = document.getElementById('subscription-banner'); 
-  const cardFixoCompra = document.getElementById('fixed-subscription-card'); 
+  const bannerBloqueio = document.getElementById('subscription-banner');
+  const cardFixoCompra = document.getElementById('fixed-subscription-card');
   const btnConverter = document.getElementById('btn-convert');
   const tagAssinatura = document.querySelector('.tag');
 
@@ -819,7 +822,7 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
   btn.innerText = "Verificando limites...";
 
   const podeConverter = await verificarAcessoEPlano();
-  if (!podeConverter) return; 
+  if (!podeConverter) return;
 
   const cfg = BANCOS[selectedBank];
   const progressWrap = document.getElementById('progress-wrap');
