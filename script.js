@@ -764,7 +764,7 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
       `<p style="color:var(--muted);font-size:13px;font-family:var(--font-mono)">${err.message}</p>`);
   }
 
-  btn.disabled = false;
+  updateConvertBtn();
 });
 
 // Restaurando a função de Gerar OFX que foi cortada na sua mensagem original:
