@@ -472,6 +472,14 @@ async function processText(text, bankConfig) {
       skip = true;
     }
 
+    // 🚀 NOVO: EXTERMINADOR DE CABEÇALHOS DE PÁGINA (Banco do Brasil e outros)
+    // Destrói as linhas "Dia Lote Documento Histórico Valor" que se repetem ao virar a página
+    if (!skip && /^(Dia|Data)\s+(Lote|Histórico|Historico|Documento|Descrição|Descricao)/i.test(linha)) {
+      skip = true;
+    }
+    // Mata a palavra "DIA" se ela aparecer perdida sozinha na linha
+    if (!skip && upper === "DIA") skip = true;
+
     if (!skip && /Entradas:.*Sa[íi]das:/i.test(linha)) skip = true;
     if (!skip && /^(?:JANEIRO|FEVEREIRO|MAR[CÇ]O|ABRIL|MAIO|JUNHO|JULHO|AGOSTO|SETEMBRO|OUTUBRO|NOVEMBRO|DEZEMBRO)\s+20\d{2}/i.test(linha)) skip = true;
     if (!skip && (/I=PDF|U=NC|G=30/.test(upper))) skip = true;
@@ -519,11 +527,11 @@ async function processText(text, bankConfig) {
       const mDate = linha.match(bankConfig.regex_date);
       if (mDate) {
         const dateStr = mDate[1];
-
+        
         // 🚀 BLOQUEADOR BB: Extermina as linhas de 00/00/0000 para não quebrar a transação anterior
         if (dateStr === "00/00/0000" || dateStr === "00/00/00") {
-          currentTx = null;
-          nextMemoBuffer = '';
+          currentTx = null; 
+          nextMemoBuffer = ''; 
           continue;
         }
 
@@ -549,12 +557,12 @@ async function processText(text, bankConfig) {
         } else {
           const extra = removerLoteDoc(linha);
           if (extra) {
-            // 🚀 MEMÓRIA FUTURA BB: Se ler o Pix fora de ordem (antes da data), guarda no buffer!
-            if (/^Pix\s*-/i.test(extra)) {
-              nextMemoBuffer += ' ' + extra;
-            } else {
-              currentTx.memo += ' ' + extra;
-            }
+             // 🚀 MEMÓRIA FUTURA BB: Se ler o Pix fora de ordem (antes da data), guarda no buffer!
+             if (/^Pix\s*-/i.test(extra)) {
+                nextMemoBuffer += ' ' + extra;
+             } else {
+                currentTx.memo += ' ' + extra;
+             }
           }
         }
       }
@@ -582,9 +590,9 @@ async function processText(text, bankConfig) {
           if (p.length === 2) {
             dateStr = `${p[0]}/${p[1]}/${currentYear}`;
           } else if (p.length === 3 && p[2].length === 2) {
-            dateStr = `${p[0]}/${p[1]}/20${p[2]}`;
+            dateStr = `${p[0]}/${p[1]}/20${p[2]}`; 
           } else {
-            dateStr = dateStr.trim();
+            dateStr = dateStr.trim(); 
           }
         } else if (fmt === "DIA_APENAS") {
           if (dateStr) lastDay = dateStr; else { if (!lastDay) continue; dateStr = lastDay; }
@@ -611,7 +619,7 @@ async function processText(text, bankConfig) {
             if (bankConfig.bank_id === "197") {
               const lixo = ["STONE", "AG:", "CC:", "PAGAMENTO S.A", "INSTITUIÇ", "CONTRAPARTE", "SALDO"];
               const trailing = ["PIX", "ANTECIPA", "TRANSFER", "MAQUININHA", "CARTÃO", "CARTAO", "CRÉDITO", "CREDITO", "DÉBITO", "DEBITO", "MASTERCARD", "VISA", "ELO", "AMEX", "HIPER", "BOLETO"];
-
+              
               if (lixo.some(c => extra.toUpperCase().includes(c))) { /* skip */ }
               else if (trailing.some(t => extra.toUpperCase().includes(t))) currentTx.memo += ' ' + extra;
               else nextMemoBuffer += ' ' + extra;
@@ -621,8 +629,8 @@ async function processText(text, bankConfig) {
               else currentTx.memo += ' ' + extra;
             } else { currentTx.memo += ' ' + extra; }
           } else {
-            if (bankConfig.bank_id === "197" || bankConfig.bank_id === "336" || bankConfig.bank_id === "041" || bankConfig.bank_id === "748" || bankConfig.bank_id === "001") {
-              /* joga no lixo virtual */
+            if (bankConfig.bank_id === "197" || bankConfig.bank_id === "336" || bankConfig.bank_id === "041" || bankConfig.bank_id === "748" || bankConfig.bank_id === "001") { 
+                /* joga no lixo virtual */ 
             }
             else nextMemoBuffer += ' ' + extra;
           }
