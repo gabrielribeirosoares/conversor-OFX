@@ -1,7 +1,6 @@
 const SUPABASE_URL = 'https://ewawtckqvicvfuwrasel.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_02GmlN7B5mkkavp8mrjoIg_3Hdhnkud';
 
-// Usamos um nome único para evitar o erro "already declared"
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Referências da Interface
@@ -52,39 +51,31 @@ function bloquearSaida() {
 }
 
 // ============================================================================
-// 2. LÓGICA DE REGISTO (NOME, APELIDO E ESCRITÓRIO)
+// 1. LÓGICA DE REGISTRO
 // ============================================================================
-// --- Botão de Registo (Com Validação de Campos) ---
 document.getElementById('btn-do-register').onclick = async () => {
   try {
-    // Captura os valores e limpa espaços extras
     const firstName = document.getElementById('reg-first-name').value.trim();
     const lastName = document.getElementById('reg-last-name').value.trim();
     const office = document.getElementById('reg-office').value.trim();
     const email = document.getElementById('reg-email').value.trim();
     const password = document.getElementById('reg-password').value.trim();
 
-    // 1. VALIDAÇÃO: Verifica se algum campo está vazio
     if (!firstName || !lastName || !office || !email || !password) {
-      authError.style.color = 'var(--accent2)'; // Cor de erro (vermelho)
+      authError.style.color = 'var(--accent2)';
       authError.textContent = 'Preencha todos os campos (Nome, Apelido, Escritório, E-mail e Senha).';
-
-      // Dá um destaque visual no campo vazio (opcional)
       if (!firstName) document.getElementById('reg-first-name').focus();
       else if (!lastName) document.getElementById('reg-last-name').focus();
       else if (!office) document.getElementById('reg-office').focus();
-
-      return; // PARA A EXECUÇÃO AQUI. Não envia nada para o Supabase.
+      return;
     }
 
-    // 2. VALIDAÇÃO EXTRA: Tamanho mínimo da senha
     if (password.length < 6) {
       authError.style.color = 'var(--accent2)';
       authError.textContent = 'A senha deve ter pelo menos 6 caracteres.';
       return;
     }
 
-    // Se passou pelas validações, limpa erros antigos e prossegue
     authError.style.color = 'var(--text)';
     authError.textContent = 'Criando conta...';
 
@@ -101,24 +92,23 @@ document.getElementById('btn-do-register').onclick = async () => {
     });
 
     if (error) {
-      console.warn("Recusa (Supabase):", error);
       authError.style.color = 'var(--accent2)';
       authError.textContent = traduzirErro(error.message);
     } else {
       authError.style.color = 'var(--accent)';
       authError.textContent = 'Conta criada com sucesso! Já pode fazer login.';
-      // Limpa os campos após o sucesso
       registerForm.querySelectorAll('input').forEach(input => input.value = '');
       setTimeout(() => document.getElementById('go-to-login').click(), 2500);
     }
   } catch (err) {
-    console.error("Erro fatal:", err);
     authError.style.color = 'var(--accent2)';
     authError.textContent = 'Erro no sistema. Tente novamente.';
   }
 };
 
-
+// ============================================================================
+// 2. LÓGICA DE LOGIN E SESSÃO
+// ============================================================================
 document.getElementById('btn-do-login').onclick = async () => {
   try {
     const email = document.getElementById('login-email').value.trim();
@@ -133,50 +123,33 @@ document.getElementById('btn-do-login').onclick = async () => {
     authError.style.color = 'var(--text)';
     authError.textContent = 'Acessando...';
 
-    // Dispara a tentativa de login
-    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
     if (error) {
       authError.style.color = 'var(--accent2)';
       authError.textContent = traduzirErro(error.message);
     } else {
-      // SUCESSO! Libera o acesso instantaneamente aqui, sem esperar o fiscal de fundo
       authError.textContent = '';
-      
       try {
         await verificarAcessoEPlano();
-      } catch (e) {
-        console.error("Erro ao puxar limites no login:", e);
-      }
-      
+      } catch (e) {}
       permitirEntrada();
       iniciarMonitoramento();
     }
-
   } catch (err) {
-    console.error("Erro no login:", err);
     authError.style.color = 'var(--accent2)';
     authError.textContent = 'Erro ao conectar com o servidor.';
   }
 };
 
-// Logout e Sessão
 document.getElementById('btn-logout').onclick = async () => {
   await supabaseClient.auth.signOut();
   bloquearSaida();
 };
 
-// ==========================================
-// MONITOR DE SEGURANÇA (LOGOFF INSTANTÂNEO)
-// ==========================================
-
 async function validarUsuarioNoServidor() {
-  // getUser() obriga o Supabase a checar o banco de dados real
   const { data: { user }, error } = await supabaseClient.auth.getUser();
-
-  // Se o servidor retornar erro ou não encontrar o user, o usuário foi deletado/banido
   if (error || !user) {
-    console.warn("Acesso revogado pelo administrador.");
     await supabaseClient.auth.signOut();
     bloquearSaida();
     authError.style.color = 'var(--accent2)';
@@ -186,74 +159,261 @@ async function validarUsuarioNoServidor() {
   return true;
 }
 
-// Verifica a cada 10 segundos se o usuário ainda existe no banco
-// (Você pode aumentar esse tempo para 30 ou 60 segundos para economizar recursos)
 let monitorAcesso = null;
-
 function iniciarMonitoramento() {
   if (monitorAcesso) clearInterval(monitorAcesso);
-
   monitorAcesso = setInterval(async () => {
     const ativo = await validarUsuarioNoServidor();
     if (!ativo) clearInterval(monitorAcesso);
-  }, 60000); // 10000ms = 10 segundos
+  }, 60000); 
 }
 
 async function verificarSessaoInicial() {
   const { data: { session } } = await supabaseClient.auth.getSession();
-
   if (session) {
     const aindaExiste = await validarUsuarioNoServidor();
     if (aindaExiste) {
-      // 🚀 CORREÇÃO AQUI: Puxa os limites do banco antes de liberar a interface
-      await verificarAcessoEPlano();
-      
+      await verificarAcessoEPlano(); // Atualiza limites na hora
       permitirEntrada();
-      iniciarMonitoramento(); // Começa a vigiar o status
+      iniciarMonitoramento(); 
     }
   } else {
     bloquearSaida();
   }
 }
 
-// Atualiza o monitoramento quando o estado muda
+// ÚNICO OBSERVADOR DE ESTADO (Unificado)
 supabaseClient.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_IN') {
-    try {
-      // 🚀 Atualiza os limites com segurança
-      await verificarAcessoEPlano();
-    } catch (e) {
-      console.error("Erro ao carregar o perfil:", e);
-    }
-    
+    try { await verificarAcessoEPlano(); } catch (e) {}
     iniciarMonitoramento();
     permitirEntrada();
-    
-    // Limpa a mensagem "Acessando..." caso tenha vindo do login
     if (authError) authError.textContent = ''; 
-  }
-  
-  if (event === 'SIGNED_OUT') {
+  } else if (event === 'SIGNED_OUT') {
     if (typeof monitorAcesso !== 'undefined') clearInterval(monitorAcesso);
     bloquearSaida();
-  }
-  
-  if (event === 'PASSWORD_RECOVERY') {
+  } else if (event === 'PASSWORD_RECOVERY') {
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app-screen').style.display = 'block';
     navegarPara('view-update-password');
   }
 });
 
-
 verificarSessaoInicial();
 
 // ============================================================================
-// 4. MOTOR DO CONVERSOR (REGRAS DOS BANCOS)
+// 3. RECUPERAÇÃO DE SENHA E MENU LATERAL
+// ============================================================================
+document.getElementById('btn-reset-password').onclick = async () => {
+  const btn = document.getElementById('btn-reset-password');
+  const msg = document.getElementById('reset-msg');
+  try {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) return;
+    btn.disabled = true;
+    btn.innerText = "Enviando...";
+
+    const { error } = await supabaseClient.auth.resetPasswordForEmail(user.email, {
+      redirectTo: 'https://conversor-ofx-six.vercel.app/', 
+    });
+    if (error) throw error;
+    msg.style.color = "var(--accent)";
+    msg.textContent = "E-mail de redefinição enviado! Verifique sua caixa de entrada.";
+    btn.innerText = "E-mail Enviado";
+  } catch (err) {
+    msg.style.color = "var(--accent2)";
+    msg.textContent = "Erro ao enviar e-mail. Tente novamente mais tarde.";
+    btn.disabled = false;
+    btn.innerText = "Tentar novamente";
+  }
+};
+
+document.getElementById('btn-save-new-password').onclick = async () => {
+  const novaSenha = document.getElementById('new-recovery-password').value;
+  const msg = document.getElementById('recovery-msg');
+  const btn = document.getElementById('btn-save-new-password');
+
+  if (novaSenha.length < 6) {
+    msg.style.color = "var(--accent2)";
+    msg.textContent = "A senha deve ter pelo menos 6 caracteres.";
+    return;
+  }
+  btn.disabled = true;
+  msg.style.color = "var(--text)";
+  msg.textContent = "A atualizar a senha...";
+
+  const { error } = await supabaseClient.auth.updateUser({ password: novaSenha });
+  if (error) {
+    msg.style.color = "var(--accent2)";
+    msg.textContent = "Erro: " + traduzirErro(error.message);
+    btn.disabled = false;
+  } else {
+    msg.style.color = "var(--accent)";
+    msg.textContent = "✅ Senha atualizada com sucesso!";
+    setTimeout(() => {
+      document.getElementById('new-recovery-password').value = '';
+      btn.disabled = false;
+      msg.textContent = '';
+      navegarPara('view-converter');
+    }, 2000);
+  }
+};
+
+const menuBtn = document.getElementById('hamburger-menu');
+const closeBtn = document.getElementById('close-menu');
+const sideMenu = document.getElementById('side-menu');
+const overlay = document.getElementById('sidebar-overlay');
+
+function toggleMenu() {
+  sideMenu.classList.toggle('active');
+  overlay.classList.toggle('active');
+}
+menuBtn.onclick = toggleMenu;
+closeBtn.onclick = toggleMenu;
+overlay.onclick = toggleMenu;
+
+function navegarPara(idDaTela) {
+  const secoes = document.querySelectorAll('#app-screen section');
+  secoes.forEach(s => s.style.display = 'none');
+  const telaAlvo = document.getElementById(idDaTela);
+  if (telaAlvo) telaAlvo.style.display = 'block';
+  if (sideMenu) sideMenu.classList.remove('active');
+  if (overlay) overlay.classList.remove('active');
+}
+
+document.querySelectorAll('.back-btn').forEach(btn => {
+  btn.onclick = () => navegarPara('view-converter');
+});
+
+document.getElementById('menu-converter').onclick = () => navegarPara('view-converter');
+
+document.getElementById('menu-profile').onclick = async () => {
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  if (user) {
+    const { data: profile } = await supabaseClient.from('profiles').select('*').eq('id', user.id).single();
+    if (profile) {
+      document.getElementById('prof-name').textContent = `${profile.first_name} ${profile.last_name}`;
+      document.getElementById('prof-office').textContent = profile.office;
+      document.getElementById('prof-status').textContent = profile.plan_status.toUpperCase();
+    }
+  }
+  navegarPara('view-profile'); 
+};
+
+document.getElementById('menu-limits').onclick = async () => {
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  if (user) {
+    const { data: profile } = await supabaseClient.from('profiles').select('conversions_used, conversion_limit').eq('id', user.id).single();
+    if (profile) {
+      const uso = profile.conversions_used || 0;
+      const limite = profile.conversion_limit || 3;
+      document.getElementById('limits-display').textContent = `${uso} / ${limite}`;
+      const infoReset = document.getElementById('reset-timer-view');
+      if (infoReset) infoReset.textContent = "O limite é reiniciado automaticamente à meia-noite.";
+    }
+  }
+  navegarPara('view-limits');
+};
+
+document.getElementById('menu-about').onclick = () => navegarPara('view-about');
+
+
+// ============================================================================
+// 4. LIMITES E ASSINATURAS (STRIPE)
+// ============================================================================
+const stripe = Stripe('pk_test_51TReq2Fmh5VQuv7rVWKLHrpTf7JDfACfrwWbEVqS0ir9jhnsfWE3qoUjb5l378bD06zEhOpa80Bjuy7mJgsJiUMM00bIAKAYQp');
+
+document.getElementById('btn-subscribe').addEventListener('click', async () => {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) return;
+  window.location.href = 'https://buy.stripe.com/test_fZu8wP3DMdbQgqBgJn3Nm00';
+});
+document.getElementById('btn-subscribe-fixed').addEventListener('click', () => {
+  window.location.href = 'https://buy.stripe.com/test_fZu8wP3DMdbQgqBgJn3Nm00';
+});
+
+async function verificarAcessoEPlano() {
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  if (!user) return false;
+
+  const { data: profile, error } = await supabaseClient
+    .from('profiles')
+    .select('plan_status, conversion_limit, conversions_used, last_conversion_date')
+    .eq('id', user.id)
+    .single();
+
+  if (error || !profile) return false;
+
+  const infoTexto = document.getElementById('trial-info');
+  const bannerBloqueio = document.getElementById('subscription-banner'); 
+  const cardFixoCompra = document.getElementById('fixed-subscription-card'); 
+  const btnConverter = document.getElementById('btn-convert');
+  const tagAssinatura = document.querySelector('.tag');
+
+  const hoje = new Date().toISOString().split('T')[0];
+
+  if (profile.plan_status === 'active') {
+    if (infoTexto) infoTexto.innerHTML = "✨ <strong>Plano Profissional Ativo</strong> (Ilimitado)";
+    if (bannerBloqueio) bannerBloqueio.style.display = 'none';
+    if (cardFixoCompra) cardFixoCompra.style.display = 'none';
+    if (tagAssinatura) {
+      tagAssinatura.textContent = "Assinatura Profissional";
+      tagAssinatura.style.background = "var(--accent)";
+    }
+    btnConverter.disabled = false;
+    btnConverter.innerText = "Converter para OFX";
+    return true;
+  }
+
+  let usoAtual = profile.conversions_used || 0;
+  if (!profile.last_conversion_date || profile.last_conversion_date < hoje) {
+    usoAtual = 0;
+  }
+
+  const limite = profile.conversion_limit || 3;
+  const resta = limite - usoAtual;
+
+  const agora = new Date();
+  const amanha = new Date();
+  amanha.setHours(24, 0, 0, 0);
+  const horasParaReset = Math.floor((amanha - agora) / (1000 * 60 * 60));
+
+  if (usoAtual >= limite) {
+    if (bannerBloqueio) bannerBloqueio.style.display = 'block';
+    if (cardFixoCompra) cardFixoCompra.style.display = 'none';
+
+    btnConverter.disabled = true;
+    btnConverter.innerText = "Limite Diário Atingido";
+    btnConverter.style.opacity = "0.5";
+
+    if (infoTexto) infoTexto.innerHTML = `Limite atingido! Reset em <strong>${horasParaReset} horas</strong>.`;
+    if (tagAssinatura) {
+      tagAssinatura.textContent = "Limite Atingido";
+      tagAssinatura.style.background = "var(--accent2)";
+    }
+    return false;
+  } else {
+    if (bannerBloqueio) bannerBloqueio.style.display = 'none';
+    if (cardFixoCompra) cardFixoCompra.style.display = 'block';
+
+    btnConverter.disabled = !(selectedBank && selectedFile);
+    btnConverter.innerText = "Converter para OFX";
+    btnConverter.style.opacity = "1";
+
+    if (infoTexto) infoTexto.innerHTML = `🎁 Você tem <strong>${resta}</strong> conversões grátis hoje. Reset em ${horasParaReset}h.`;
+    if (tagAssinatura) {
+      tagAssinatura.textContent = "Plano Gratuito";
+      tagAssinatura.style.background = "#555";
+    }
+    return true;
+  }
+}
+
+// ============================================================================
+// 5. MOTOR DO CONVERSOR E REGRAS DE BANCO
 // ============================================================================
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-// ─── BANCOS ──────────────────────────────────────────────────────────────────
 const BANCOS = {
   "Unicred": { bank_id: "136", type: "UNICRED" },
   "Sicredi": {
@@ -293,14 +453,11 @@ const BANCOS = {
   }
 };
 
-
-
 let selectedBank = null;
 let selectedFile = null;
 let lastTransactions = [];
 let lastPdfText = '';
 
-// ─── Bank grid ───
 const bankGrid = document.getElementById('bank-grid');
 Object.entries(BANCOS).forEach(([name, cfg]) => {
   const btn = document.createElement('button');
@@ -315,7 +472,6 @@ Object.entries(BANCOS).forEach(([name, cfg]) => {
   bankGrid.appendChild(btn);
 });
 
-// ─── File input ───
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const fileInfo = document.getElementById('file-info');
@@ -350,13 +506,10 @@ dropZone.addEventListener('drop', e => {
 
 function updateConvertBtn() {
   const btn = document.getElementById('btn-convert');
-  
-  // TRAVA DE SEGURANÇA: Se o botão já estiver avisando do limite, ele não pode ser reativado de jeito nenhum!
   if (btn.innerText.includes("Limite")) {
     btn.disabled = true;
     return;
   }
-  
   btn.disabled = !(selectedBank && selectedFile);
 }
 
@@ -394,7 +547,6 @@ async function extractTextFromPDF(file, onProgress) {
   return fullText;
 }
 
-// ─── Parsers ───
 function cleanCurrency(str) {
   if (!str) return null;
   const isNeg = /[-–—]/.test(str) || /[Dd]/.test(str.replace(/R\$/, ''));
@@ -500,9 +652,7 @@ async function processText(text, bankConfig) {
     const upper = linha.toUpperCase();
     let skip = IGNORAR.some(p => upper.startsWith(p));
 
-    // Pula resumo de Entradas/Saídas (C6 Bank) independentemente da seta
     if (!skip && /Entradas:.*Sa[íi]das:/i.test(linha)) skip = true;
-
     if (!skip && /^(?:JANEIRO|FEVEREIRO|MAR[CÇ]O|ABRIL|MAIO|JUNHO|JULHO|AGOSTO|SETEMBRO|OUTUBRO|NOVEMBRO|DEZEMBRO)\s+20\d{2}/i.test(linha)) skip = true;
     if (!skip && (/I=PDF|U=NC|G=30/.test(upper))) skip = true;
     if (!skip && /^[\+\-\s]+$/.test(linha)) skip = true;
@@ -687,14 +837,23 @@ function showResult(type, icon, title, bodyHTML) {
   document.getElementById('result-body').innerHTML = bodyHTML;
 }
 
+// ============================================================================
+// BOTÃO PRINCIPAL DE CONVERSÃO
+// ============================================================================
 document.getElementById('btn-convert').addEventListener('click', async () => {
   if (!selectedBank || !selectedFile) return;
-  const cfg = BANCOS[selectedBank];
+
+  // TRAVA DE SEGURANÇA MÁXIMA (Double-check no Servidor contra uso do F5)
   const btn = document.getElementById('btn-convert');
-  
+  btn.disabled = true;
+  btn.innerText = "Verificando limites...";
+
+  const podeConverter = await verificarAcessoEPlano();
+  if (!podeConverter) return; // Se for false, a própria função já acendeu a tela vermelha
+
+  const cfg = BANCOS[selectedBank];
   const progressWrap = document.getElementById('progress-wrap');
 
-  btn.disabled = true;
   progressWrap.classList.add('visible');
   document.getElementById('result-card').className = 'result-card';
   setProgress(0, 'Lendo PDF...');
@@ -724,7 +883,6 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
       if (user) {
         const hoje = new Date().toISOString().split('T')[0];
 
-        // Pega as informações atuais do usuário
         const { data: profile } = await supabaseClient
           .from('profiles')
           .select('conversions_used, last_conversion_date, plan_status')
@@ -733,27 +891,27 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
 
         if (profile) {
           let novoUso = profile.conversions_used || 0;
-
-          // Se for o primeiro do dia, reseta para 1. Se não, soma +1
           if (!profile.last_conversion_date || profile.last_conversion_date < hoje) {
             novoUso = 1;
           } else {
             novoUso += 1;
           }
 
-          // Envia a atualização para o Supabase para TODOS os usuários (grátis ou ativos)
-          await supabaseClient.from('profiles').update({
+          const { error: erroUpdate } = await supabaseClient.from('profiles').update({
             conversions_used: novoUso,
             last_conversion_date: hoje
           }).eq('id', user.id);
 
-          // Atualiza a tela (número verde/vermelho) para refletir o uso imediato
+          if (erroUpdate) {
+            console.error("ERRO DO SUPABASE:", erroUpdate);
+            alert("Erro de segurança no banco de dados: " + erroUpdate.message + "\n(Verifique as políticas de RLS no Supabase!)");
+          }
+
           if (typeof verificarAcessoEPlano === "function") {
             await verificarAcessoEPlano();
           }
         }
       }
-      // =========================================================
 
       const credits = txs.filter(t => t.amount > 0);
       const debits = txs.filter(t => t.amount < 0);
@@ -782,8 +940,6 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
       const btnDownload = document.getElementById('btn-dl');
       btnDownload.addEventListener('click', function () {
         downloadOFX(ofxContent, ofxName);
-
-        // Feedback visual de sucesso
         this.innerHTML = '✅ Download efetuado';
         this.style.background = 'var(--accent)';
         this.style.color = '#0d0f14';
@@ -796,57 +952,13 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
       `<p style="color:var(--muted);font-size:13px;font-family:var(--font-mono)">${err.message}</p>`);
   }
 
-  btn.disabled = false;
+  // Desbloqueia o botão utilizando a nossa regra inteligente (impede ligar o botão se bater o limite)
+  updateConvertBtn();
 });
 
-// Restaurando a função de Gerar OFX que foi cortada na sua mensagem original:
-function generateOFX(transactions, bankId) {
-  const now = new Date();
-  const ts = now.getFullYear().toString() +
-    String(now.getMonth() + 1).padStart(2, '0') +
-    String(now.getDate()).padStart(2, '0') +
-    String(now.getHours()).padStart(2, '0') +
-    String(now.getMinutes()).padStart(2, '0') +
-    String(now.getSeconds()).padStart(2, '0');
-
-  const header = `OFXHEADER:100\nDATA:OFXSGML\nVERSION:102\nSECURITY:NONE\nENCODING:USASCII\nCHARSET:1252\nCOMPRESSION:NONE\nOLDFILEUID:NONE\nNEWFILEUID:NONE\n<OFX>\n<SIGNONMSGSRSV1><SONRS><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>\n<DTSERVER>${ts}</DTSERVER><LANGUAGE>POR</LANGUAGE></SONRS></SIGNONMSGSRSV1>\n<BANKMSGSRSV1><STMTTRNRS><TRNUID>1001</TRNUID>\n<STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>\n<STMTRS><CURDEF>BRL</CURDEF>\n<BANKACCTFROM><BANKID>${bankId}</BANKID><ACCTID>00000</ACCTID><ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM>\n<BANKTRANLIST><DTSTART>${ts}</DTSTART><DTEND>${ts}</DTEND>\n`;
-
-  let body = '';
-  for (const tx of transactions) {
-    const dtFmt = formatDateOFX(tx.date);
-    const trntype = tx.amount > 0 ? 'CREDIT' : 'DEBIT';
-    const safeMemo = tx.memo.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    body += `<STMTTRN><TRNTYPE>${trntype}</TRNTYPE><DTPOSTED>${dtFmt}</DTPOSTED><TRNAMT>${tx.amount.toFixed(2)}</TRNAMT><FITID>${tx.fitid}</FITID><MEMO>${safeMemo}</MEMO></STMTTRN>\n`;
-  }
-
-  const footer = `</BANKTRANLIST><LEDGERBAL><BALAMT>0.00</BALAMT><DTASOF>${ts}</DTASOF></LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`;
-  return header + body + footer;
-}
-
-// Restaurando a função de Gerar OFX que foi cortada na sua mensagem original:
-function generateOFX(transactions, bankId) {
-  const now = new Date();
-  const ts = now.getFullYear().toString() +
-    String(now.getMonth() + 1).padStart(2, '0') +
-    String(now.getDate()).padStart(2, '0') +
-    String(now.getHours()).padStart(2, '0') +
-    String(now.getMinutes()).padStart(2, '0') +
-    String(now.getSeconds()).padStart(2, '0');
-
-  const header = `OFXHEADER:100\nDATA:OFXSGML\nVERSION:102\nSECURITY:NONE\nENCODING:USASCII\nCHARSET:1252\nCOMPRESSION:NONE\nOLDFILEUID:NONE\nNEWFILEUID:NONE\n<OFX>\n<SIGNONMSGSRSV1><SONRS><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>\n<DTSERVER>${ts}</DTSERVER><LANGUAGE>POR</LANGUAGE></SONRS></SIGNONMSGSRSV1>\n<BANKMSGSRSV1><STMTTRNRS><TRNUID>1001</TRNUID>\n<STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>\n<STMTRS><CURDEF>BRL</CURDEF>\n<BANKACCTFROM><BANKID>${bankId}</BANKID><ACCTID>00000</ACCTID><ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM>\n<BANKTRANLIST><DTSTART>${ts}</DTSTART><DTEND>${ts}</DTEND>\n`;
-
-  let body = '';
-  for (const tx of transactions) {
-    const dtFmt = formatDateOFX(tx.date);
-    const trntype = tx.amount > 0 ? 'CREDIT' : 'DEBIT';
-    const safeMemo = tx.memo.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    body += `<STMTTRN><TRNTYPE>${trntype}</TRNTYPE><DTPOSTED>${dtFmt}</DTPOSTED><TRNAMT>${tx.amount.toFixed(2)}</TRNAMT><FITID>${tx.fitid}</FITID><MEMO>${safeMemo}</MEMO></STMTTRN>\n`;
-  }
-
-  const footer = `</BANKTRANLIST><LEDGERBAL><BALAMT>0.00</BALAMT><DTASOF>${ts}</DTASOF></LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`;
-  return header + body + footer;
-}
-
+// ============================================================================
+// 6. MODAL DO RAIO-X
+// ============================================================================
 document.getElementById('btn-xray').addEventListener('click', async () => {
   const modal = document.getElementById('xray-modal');
   const xrayText = document.getElementById('xray-text');
@@ -875,327 +987,7 @@ document.getElementById('btn-xray').addEventListener('click', async () => {
 document.getElementById('modal-close').addEventListener('click', () => {
   document.getElementById('xray-modal').classList.remove('visible');
 });
+
 document.getElementById('xray-modal').addEventListener('click', e => {
   if (e.target === e.currentTarget) e.currentTarget.classList.remove('visible');
 });
-
-const btnFecharModal = document.getElementById('modal-close');
-const modalRaioX = document.getElementById('xray-modal');
-
-if (btnFecharModal) {
-  btnFecharModal.addEventListener('click', () => {
-    modalRaioX.classList.remove('visible');
-  });
-}
-
-if (modalRaioX) {
-  modalRaioX.addEventListener('click', (e) => {
-    if (e.target === modalRaioX) {
-      modalRaioX.classList.remove('visible');
-    }
-  });
-}
-
-const stripe = Stripe('pk_test_51TReq2Fmh5VQuv7rVWKLHrpTf7JDfACfrwWbEVqS0ir9jhnsfWE3qoUjb5l378bD06zEhOpa80Bjuy7mJgsJiUMM00bIAKAYQp'); // Substitua pela sua pk_test_...
-
-document.getElementById('btn-subscribe').addEventListener('click', async () => {
-  const { data: { session } } = await supabaseClient.auth.getSession();
-
-  if (!session) return;
-
-  // Para um MVP rápido, vamos redirecionar para um Payment Link do Stripe
-  // que você cria no painel do Stripe (Payments > Payment Links)
-  // No Payment Link, configure para "Passar ID do cliente" ou URL de sucesso
-  window.location.href = 'https://buy.stripe.com/test_fZu8wP3DMdbQgqBgJn3Nm00';
-});
-
-async function verificarAcessoEPlano() {
-  const { data: { user } } = await supabaseClient.auth.getUser();
-  if (!user) return false;
-
-  // Busca os dados do perfil
-  const { data: profile, error } = await supabaseClient
-    .from('profiles')
-    .select('plan_status, conversion_limit, conversions_used, last_conversion_date')
-    .eq('id', user.id)
-    .single();
-
-  if (error || !profile) return false;
-
-  const infoTexto = document.getElementById('trial-info');
-  const bannerBloqueio = document.getElementById('subscription-banner'); // Card Vermelho
-  const cardFixoCompra = document.getElementById('fixed-subscription-card'); // Card Verde
-  const btnConverter = document.getElementById('btn-convert');
-  const tagAssinatura = document.querySelector('.tag');
-
-  const hoje = new Date().toISOString().split('T')[0];
-
-  // 1. Lógica para Assinante Ativo (Esconde todos os banners de compra)
-  if (profile.plan_status === 'active') {
-    if (infoTexto) infoTexto.innerHTML = "✨ <strong>Plano Profissional Ativo</strong> (Ilimitado)";
-    if (bannerBloqueio) bannerBloqueio.style.display = 'none';
-    if (cardFixoCompra) cardFixoCompra.style.display = 'none';
-    if (tagAssinatura) {
-      tagAssinatura.textContent = "Assinatura Profissional";
-      tagAssinatura.style.background = "var(--accent)";
-    }
-    btnConverter.disabled = false;
-    btnConverter.innerText = "Converter para OFX";
-    return true;
-  }
-
-  // 2. Lógica para Usuário Grátis
-  let usoAtual = profile.conversions_used || 0;
-  if (!profile.last_conversion_date || profile.last_conversion_date < hoje) {
-    usoAtual = 0;
-  }
-
-  const limite = profile.conversion_limit || 3;
-  const resta = limite - usoAtual;
-
-  // Cálculo do tempo para o reset (Meia-noite)
-  const agora = new Date();
-  const amanha = new Date();
-  amanha.setHours(24, 0, 0, 0);
-  const horasParaReset = Math.floor((amanha - agora) / (1000 * 60 * 60));
-
-  // 3. REGRA DE EXIBIÇÃO ÚNICA (Resolve a duplicidade da imagem)
-  if (usoAtual >= limite) {
-    // LIMITE ATINGIDO: Mostra apenas o banner de bloqueio (vermelho)
-    if (bannerBloqueio) bannerBloqueio.style.display = 'block';
-    if (cardFixoCompra) cardFixoCompra.style.display = 'none';
-
-    btnConverter.disabled = true;
-    btnConverter.innerText = "Limite Diário Atingido";
-    btnConverter.style.opacity = "0.5";
-
-    if (infoTexto) infoTexto.innerHTML = `Limite atingido! Reset em <strong>${horasParaReset} horas</strong>.`;
-    if (tagAssinatura) {
-      tagAssinatura.textContent = "Limite Atingido";
-      tagAssinatura.style.background = "var(--accent2)";
-    }
-    return false;
-  } else {
-    // DENTRO DO LIMITE: Mostra apenas o card fixo (verde)
-    if (bannerBloqueio) bannerBloqueio.style.display = 'none';
-    if (cardFixoCompra) cardFixoCompra.style.display = 'block';
-
-    btnConverter.disabled = !(selectedBank && selectedFile);
-    btnConverter.innerText = "Converter para OFX";
-    btnConverter.style.opacity = "1";
-
-    if (infoTexto) infoTexto.innerHTML = `🎁 Você tem <strong>${resta}</strong> conversões grátis hoje. Reset em ${horasParaReset}h.`;
-    if (tagAssinatura) {
-      tagAssinatura.textContent = "Plano Gratuito";
-      tagAssinatura.style.background = "#555";
-    }
-    return true;
-  }
-}
-
-// Adicione isto junto com seus outros Event Listeners
-document.getElementById('btn-subscribe-fixed').addEventListener('click', () => {
-  // Redireciona para o Checkout do Stripe
-  window.location.href = 'https://buy.stripe.com/test_fZu8wP3DMdbQgqBgJn3Nm00';
-});
-
-// Controle do Menu Hambúrguer
-const menuBtn = document.getElementById('hamburger-menu');
-const closeBtn = document.getElementById('close-menu');
-const sideMenu = document.getElementById('side-menu');
-const overlay = document.getElementById('sidebar-overlay');
-
-function toggleMenu() {
-  sideMenu.classList.toggle('active');
-  overlay.classList.toggle('active');
-}
-
-menuBtn.onclick = toggleMenu;
-closeBtn.onclick = toggleMenu;
-overlay.onclick = toggleMenu;
-
-// Funções dos itens do Menu
-document.getElementById('menu-profile').onclick = async () => {
-  const { data: { user } } = await supabaseClient.auth.getUser();
-  const { data: profile } = await supabaseClient.from('profiles').select('*').eq('id', user.id).single();
-
-  toggleMenu();
-  alert(`👤 PERFIL\n\nNome: ${profile.first_name} ${profile.last_name}\nEscritório: ${profile.office}\nPlano: ${profile.plan_status.toUpperCase()}`);
-};
-
-document.getElementById('menu-limits').onclick = async () => {
-  const { data: { user } } = await supabaseClient.auth.getUser();
-  const { data: profile } = await supabaseClient.from('profiles').select('conversions_used, conversion_limit').eq('id', user.id).single();
-
-  toggleMenu();
-  const uso = profile.conversions_used || 0;
-  const limite = profile.conversion_limit || 3;
-  alert(`📊 LIMITES\n\nVocê usou ${uso} de ${limite} conversões diárias hoje.`);
-};
-
-document.getElementById('menu-about').onclick = () => {
-  toggleMenu();
-  alert("ℹ️ SOBRE\n\nConversor PDF para OFX Profissional v1.1\nDesenvolvido para agilizar a conciliação bancária de escritórios contábeis.");
-};
-
-// --- SISTEMA DE NAVEGAÇÃO ---
-
-// --- LÓGICA DE NAVEGAÇÃO ENTRE TELAS ---
-
-function navegarPara(idDaTela) {
-  // 1. Esconde todas as seções dentro do app-screen
-  const secoes = document.querySelectorAll('#app-screen section');
-  secoes.forEach(s => s.style.display = 'none');
-
-  // 2. Mostra a seção desejada
-  const telaAlvo = document.getElementById(idDaTela);
-  if (telaAlvo) {
-    telaAlvo.style.display = 'block';
-  }
-
-  // 3. Fecha o menu lateral e o overlay
-  const sideMenu = document.getElementById('side-menu');
-  const overlay = document.getElementById('sidebar-overlay');
-  if (sideMenu) sideMenu.classList.remove('active');
-  if (overlay) overlay.classList.remove('active');
-}
-
-// Configura os botões de "Voltar" de todas as telas
-document.querySelectorAll('.back-btn').forEach(btn => {
-  btn.onclick = () => navegarPara('view-converter');
-});
-
-// --- EVENTOS DO MENU HAMBÚRGUER ---
-
-// Abrir Conversor
-document.getElementById('menu-converter').onclick = () => navegarPara('view-converter');
-
-// Abrir Perfil (Busca dados no Supabase e exibe na tela)
-document.getElementById('menu-profile').onclick = async () => {
-  const { data: { user } } = await supabaseClient.auth.getUser();
-
-  if (user) {
-    const { data: profile } = await supabaseClient
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-
-    if (profile) {
-      document.getElementById('prof-name').textContent = `${profile.first_name} ${profile.last_name}`;
-      document.getElementById('prof-office').textContent = profile.office;
-      document.getElementById('prof-status').textContent = profile.plan_status.toUpperCase();
-    }
-  }
-  navegarPara('view-profile'); // Abre a tela, não o popup
-};
-
-// Abrir Limites
-document.getElementById('menu-limits').onclick = async () => {
-  const { data: { user } } = await supabaseClient.auth.getUser();
-
-  if (user) {
-    const { data: profile } = await supabaseClient
-      .from('profiles')
-      .select('conversions_used, conversion_limit')
-      .eq('id', user.id)
-      .single();
-
-    if (profile) {
-      const uso = profile.conversions_used || 0;
-      const limite = profile.conversion_limit || 3;
-      document.getElementById('limits-display').textContent = `${uso} / ${limite}`;
-
-      // Opcional: Atualizar cronómetro de reset aqui
-      const infoReset = document.getElementById('reset-timer-view');
-      if (infoReset) infoReset.textContent = "O limite é reiniciado automaticamente à meia-noite.";
-    }
-  }
-  navegarPara('view-limits');
-};
-
-// Abrir Sobre
-document.getElementById('menu-about').onclick = () => navegarPara('view-about');
-
-// Adicione isto junto aos outros eventos do menu/perfil
-document.getElementById('btn-reset-password').onclick = async () => {
-  const btn = document.getElementById('btn-reset-password');
-  const msg = document.getElementById('reset-msg');
-
-  try {
-    const { data: { user } } = await supabaseClient.auth.getUser();
-
-    if (!user) return;
-
-    btn.disabled = true;
-    btn.innerText = "Enviando...";
-
-    const { error } = await supabaseClient.auth.resetPasswordForEmail(user.email, {
-      redirectTo: 'https://conversor-ofx-six.vercel.app/', // URL do seu site na Vercel
-    });
-
-    if (error) throw error;
-
-    msg.style.color = "var(--accent)";
-    msg.textContent = "E-mail de redefinição enviado! Verifique sua caixa de entrada.";
-    btn.innerText = "E-mail Enviado";
-
-  } catch (err) {
-    console.error("Erro ao resetar senha:", err);
-    msg.style.color = "var(--accent2)";
-    msg.textContent = "Erro ao enviar e-mail. Tente novamente mais tarde.";
-    btn.disabled = false;
-    btn.innerText = "Tentar novamente";
-  }
-};
-
-// 1. Detecta que o utilizador voltou pelo link do e-mail
-supabaseClient.auth.onAuthStateChange(async (event, session) => {
-  if (event === 'PASSWORD_RECOVERY') {
-    // Esconde a tela de login (se estiver aberta) e força a entrada no app
-    document.getElementById('auth-screen').style.display = 'none';
-    document.getElementById('app-screen').style.display = 'block';
-
-    // Navega diretamente para a nossa nova tela de atualizar senha
-    navegarPara('view-update-password');
-  }
-
-  // (Mantenha o resto da sua lógica SIGNED_IN / SIGNED_OUT aqui se já tiver)
-});
-
-// 2. Lógica para guardar a nova senha
-document.getElementById('btn-save-new-password').onclick = async () => {
-  const novaSenha = document.getElementById('new-recovery-password').value;
-  const msg = document.getElementById('recovery-msg');
-  const btn = document.getElementById('btn-save-new-password');
-
-  if (novaSenha.length < 6) {
-    msg.style.color = "var(--accent2)"; // Vermelho
-    msg.textContent = "A senha deve ter pelo menos 6 caracteres.";
-    return;
-  }
-
-  btn.disabled = true;
-  msg.style.color = "var(--text)";
-  msg.textContent = "A atualizar a senha...";
-
-  // Atualiza a senha no banco de dados do Supabase
-  const { error } = await supabaseClient.auth.updateUser({ password: novaSenha });
-
-  if (error) {
-    msg.style.color = "var(--accent2)";
-    msg.textContent = "Erro: " + traduzirErro(error.message);
-    btn.disabled = false;
-  } else {
-    msg.style.color = "var(--accent)"; // Verde
-    msg.textContent = "✅ Senha atualizada com sucesso!";
-
-    // Limpa o campo e volta para o conversor após 2 segundos
-    setTimeout(() => {
-      document.getElementById('new-recovery-password').value = '';
-      btn.disabled = false;
-      msg.textContent = '';
-      navegarPara('view-converter');
-    }, 2000);
-  }
-};
