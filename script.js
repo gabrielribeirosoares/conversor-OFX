@@ -51,10 +51,6 @@ function bloquearSaida() {
   appScreen.style.display = 'none';
 }
 
-// ============================================================================
-// 2. LÓGICA DE REGISTO (NOME, APELIDO E ESCRITÓRIO)
-// ============================================================================
-// --- Botão de Registo (Com Validação de Campos) ---
 document.getElementById('btn-do-register').onclick = async () => {
   try {
     // Captura os valores e limpa espaços extras
@@ -68,7 +64,7 @@ document.getElementById('btn-do-register').onclick = async () => {
     // 1. VALIDAÇÃO: Verifica se algum campo está vazio
     if (!firstName || !lastName || !office || !email || !password) {
       authError.style.color = 'var(--accent2)'; // Cor de erro (vermelho)
-      authError.textContent = 'Preencha todos os campos (Nome, Apelido, Escritório, E-mail e Senha).';
+      authError.textContent = 'Preencha todos os campos (Nome, Sobrenome, Escritório, E-mail e Senha).';
 
       // Dá um destaque visual no campo vazio (opcional)
       if (!firstName) document.getElementById('reg-first-name').focus();
