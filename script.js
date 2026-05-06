@@ -236,9 +236,9 @@ const BANCOS = {
     mapping: { date: 1, desc: 2, amount: 3 }
   },
   "Banco do Brasil": {
-    bank_id: "001", type: "STANDARD", date_format: "AUTO",
-    regex: /^\s*(\d{2}\/\d{2}\/\d{4})\s+(.*?)\s+([\d\.,]+\s*\([\+\-]\))\s*$/,
-    mapping: { date: 1, desc: 2, amount: 3 }
+    bank_id: "001", type: "SPLIT_DATE",
+    regex_date: /^\s*(\d{2}\/\d{2}\/\d{4})\s*(.*)$/,
+    regex_amount: /^(.*?)\s+([\d\.,]+\s*\([\+\-]\))\s*$/
   },
   "Banrisul": {
     bank_id: "041", type: "STANDARD", date_format: "INHERIT",
@@ -511,8 +511,6 @@ async function processText(text, bankConfig) {
               if (rest) currentTx.memo += ' ' + rest;
             } else { currentTx.memo += ' ' + linha; }
           } else { currentTx.memo += ' ' + linha; }
-        } else {
-          // Sala de espera
         }
       }
     }
@@ -521,13 +519,21 @@ async function processText(text, bankConfig) {
       const mDate = linha.match(bankConfig.regex_date);
       if (mDate) {
         const dateStr = mDate[1];
-        if (dateStr === "00/00/0000") continue;
+
+        // 🚀 BLOQUEADOR BB: Extermina as linhas de 00/00/0000 para não quebrar a transação anterior
+        if (dateStr === "00/00/0000" || dateStr === "00/00/00") {
+          currentTx = null;
+          nextMemoBuffer = '';
+          continue;
+        }
+
         await saveTx();
         let memoStart = removerLoteDoc(mDate[2].trim());
         if (nextMemoBuffer) { memoStart = `${nextMemoBuffer.trim()} ${memoStart}`.trim(); nextMemoBuffer = ''; }
         currentTx = { date: parseDate(dateStr, 'DD/MM/YYYY'), memo: memoStart, amount: null };
         continue;
       }
+
       if (currentTx !== null) {
         if (currentTx.amount === null) {
           const mAmt = linha.match(bankConfig.regex_amount);
@@ -538,9 +544,19 @@ async function processText(text, bankConfig) {
             if (amt !== null) currentTx.amount = amt;
             continue;
           }
+          const extra = removerLoteDoc(linha);
+          if (extra) currentTx.memo += ' ' + extra;
+        } else {
+          const extra = removerLoteDoc(linha);
+          if (extra) {
+            // 🚀 MEMÓRIA FUTURA BB: Se ler o Pix fora de ordem (antes da data), guarda no buffer!
+            if (/^Pix\s*-/i.test(extra)) {
+              nextMemoBuffer += ' ' + extra;
+            } else {
+              currentTx.memo += ' ' + extra;
+            }
+          }
         }
-        const extra = removerLoteDoc(linha);
-        if (extra) currentTx.memo += ' ' + extra;
       }
     }
 
@@ -566,9 +582,9 @@ async function processText(text, bankConfig) {
           if (p.length === 2) {
             dateStr = `${p[0]}/${p[1]}/${currentYear}`;
           } else if (p.length === 3 && p[2].length === 2) {
-            dateStr = `${p[0]}/${p[1]}/20${p[2]}`; 
+            dateStr = `${p[0]}/${p[1]}/20${p[2]}`;
           } else {
-            dateStr = dateStr.trim(); 
+            dateStr = dateStr.trim();
           }
         } else if (fmt === "DIA_APENAS") {
           if (dateStr) lastDay = dateStr; else { if (!lastDay) continue; dateStr = lastDay; }
@@ -595,7 +611,7 @@ async function processText(text, bankConfig) {
             if (bankConfig.bank_id === "197") {
               const lixo = ["STONE", "AG:", "CC:", "PAGAMENTO S.A", "INSTITUIÇ", "CONTRAPARTE", "SALDO"];
               const trailing = ["PIX", "ANTECIPA", "TRANSFER", "MAQUININHA", "CARTÃO", "CARTAO", "CRÉDITO", "CREDITO", "DÉBITO", "DEBITO", "MASTERCARD", "VISA", "ELO", "AMEX", "HIPER", "BOLETO"];
-              
+
               if (lixo.some(c => extra.toUpperCase().includes(c))) { /* skip */ }
               else if (trailing.some(t => extra.toUpperCase().includes(t))) currentTx.memo += ' ' + extra;
               else nextMemoBuffer += ' ' + extra;
@@ -605,10 +621,8 @@ async function processText(text, bankConfig) {
               else currentTx.memo += ' ' + extra;
             } else { currentTx.memo += ' ' + extra; }
           } else {
-            // 🚀 BLINDAGEM MÁXIMA DE CABEÇALHO NA SALA DE ESPERA
-            // Adicionado 001 para blindar o Banco do Brasil contra o seu próprio cabeçalho
-            if (["197", "336", "041", "748", "001"].includes(bankConfig.bank_id)) { 
-                /* joga no lixo virtual */ 
+            if (bankConfig.bank_id === "197" || bankConfig.bank_id === "336" || bankConfig.bank_id === "041" || bankConfig.bank_id === "748" || bankConfig.bank_id === "001") {
+              /* joga no lixo virtual */
             }
             else nextMemoBuffer += ' ' + extra;
           }
