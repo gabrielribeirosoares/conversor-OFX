@@ -194,6 +194,9 @@ async function verificarSessaoInicial() {
   if (session) {
     const aindaExiste = await validarUsuarioNoServidor();
     if (aindaExiste) {
+      // 🚀 CORREÇÃO AQUI: Puxa os limites do banco antes de liberar a interface
+      await verificarAcessoEPlano();
+      
       permitirEntrada();
       iniciarMonitoramento(); // Começa a vigiar o status
     }
