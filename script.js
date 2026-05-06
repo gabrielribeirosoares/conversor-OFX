@@ -859,7 +859,7 @@ async function verificarAcessoEPlano() {
   const bannerBloqueio = document.getElementById('subscription-banner'); // Card Vermelho
   const cardFixoCompra = document.getElementById('fixed-subscription-card'); // Card Verde
   const btnConverter = document.getElementById('btn-convert');
-  const tagAssinatura = document.querySelector('.tag');
+  const tagAssinatura = document.getElementById('app-status-tag');
 
   const hoje = new Date().toISOString().split('T')[0];
 

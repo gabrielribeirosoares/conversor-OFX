@@ -19,7 +19,7 @@
   <!-- TELA DE AUTENTICAÇÃO -->
   <div id="auth-screen" class="container">
     <header>
-      <div class="tag">Acesso Restrito</div>
+      <div class="tag" id="auth-status-tag">Acesso Restrito</div>
       <h1 id="auth-title">Entrar no Sistema</h1>
       <p class="subtitle">Faça login para converter os seus extratos de forma assertiva.</p>
     </header>
@@ -62,9 +62,12 @@
           <input type="password" id="reg-password" placeholder="••••••••" required>
         </div>
         <div class="input-group" style="margin-top: 8px;">
-          <label style="display:flex; align-items:flex-start; gap:10px; font-size:13px; line-height:1.5; cursor:pointer;">
+          <label
+            style="display:flex; align-items:flex-start; gap:10px; font-size:13px; line-height:1.5; cursor:pointer;">
             <input type="checkbox" id="reg-accept-terms" style="margin-top:3px;">
-            <span>Li e aceito os <a href="termos-de-uso.html" target="_blank" rel="noopener noreferrer" text-decoration: none;>Termos de Uso</a> e a <a href="lgpd.html" target="_blank" rel="noopener noreferrer" text-decoration: none;>Política de Privacidade (LGPD)</a>.</span>
+            <span>Li e aceito os <a href="termos-de-uso.html" target="_blank" rel="noopener noreferrer" text-decoration:
+                none;>Termos de Uso</a> e a <a href="lgpd.html" target="_blank" rel="noopener noreferrer"
+                text-decoration: none;>Política de Privacidade (LGPD)</a>.</span>
           </label>
         </div>
         <button class="btn-convert" id="btn-do-register">Registar e Ativar</button>
@@ -101,7 +104,7 @@
         <header>
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
             <div id="hamburger-menu" style="cursor: pointer; font-size: 24px; color: var(--text); padding: 5px;">☰</div>
-            <div class="tag">Verificando...</div>
+            <div class="tag" id="app-status-tag">Verificando...</div>
             <button id="btn-logout" class="btn-secondary" style="padding: 6px 14px; font-size: 11px;">Sair</button>
           </div>
           <h1>PDF → OFX</h1>
