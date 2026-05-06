@@ -318,7 +318,15 @@ dropZone.addEventListener('drop', e => {
 });
 
 function updateConvertBtn() {
-  document.getElementById('btn-convert').disabled = !(selectedBank && selectedFile);
+  const btn = document.getElementById('btn-convert');
+
+  // TRAVA DE SEGURANÇA: Se o botão já estiver avisando do limite, ele não pode ser reativado de jeito nenhum!
+  if (btn.innerText.includes("Limite")) {
+    btn.disabled = true;
+    return;
+  }
+
+  btn.disabled = !(selectedBank && selectedFile);
 }
 
 // ─── PDF extraction ───
