@@ -240,10 +240,12 @@ const BANCOS = {
     mapping: { date: 1, desc: 2, amount: 3 }
   },
   "Sicoob": {
-    bank_id: "756", type: "STANDARD", date_format: "DIA_MES",
-    regex: /^\s*(\d{2}\/\d{2})\s+(.+?)\s+([\d\.,]+[CDcd]?)\s*$/,
+    bank_id: "756", type: "STANDARD", date_format: "AUTO",
+    // Aceita datas completas ou curtas e considera C/D como positivo e negativo (ignorando asteriscos)
+    regex: /^\s*(\d{2}\/\d{2}(?:\/\d{2,4})?)\s+(.+?)\s+([-]?\s*[\d\.,]+\s*[CDcd]?)\s*(?:\*+)?\s*$/i,
     mapping: { date: 1, desc: 2, amount: 3 }
   },
+
   "Stone": {
     bank_id: "197", type: "STANDARD", date_format: "DD_MM_YY",
     regex: /(?:^|\s)(\d{2}\/\d{2}\/\d{2})\s+(?:Entrada|Sa[íi]da)\s*(.*?)\s*([-–—]?\s*R\$\s*[\d\.,]+)/i,
@@ -903,8 +905,8 @@ const sideMenu = document.getElementById('side-menu');
 const overlay = document.getElementById('sidebar-overlay');
 
 function toggleMenu() {
-    sideMenu.classList.toggle('active');
-    overlay.classList.toggle('active');
+  sideMenu.classList.toggle('active');
+  overlay.classList.toggle('active');
 }
 
 menuBtn.onclick = toggleMenu;
@@ -913,26 +915,26 @@ overlay.onclick = toggleMenu;
 
 // Funções dos itens do Menu
 document.getElementById('menu-profile').onclick = async () => {
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    const { data: profile } = await supabaseClient.from('profiles').select('*').eq('id', user.id).single();
-    
-    toggleMenu();
-    alert(`👤 PERFIL\n\nNome: ${profile.first_name} ${profile.last_name}\nEscritório: ${profile.office}\nPlano: ${profile.plan_status.toUpperCase()}`);
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  const { data: profile } = await supabaseClient.from('profiles').select('*').eq('id', user.id).single();
+
+  toggleMenu();
+  alert(`👤 PERFIL\n\nNome: ${profile.first_name} ${profile.last_name}\nEscritório: ${profile.office}\nPlano: ${profile.plan_status.toUpperCase()}`);
 };
 
 document.getElementById('menu-limits').onclick = async () => {
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    const { data: profile } = await supabaseClient.from('profiles').select('conversions_used, conversion_limit').eq('id', user.id).single();
-    
-    toggleMenu();
-    const uso = profile.conversions_used || 0;
-    const limite = profile.conversion_limit || 3;
-    alert(`📊 LIMITES\n\nVocê usou ${uso} de ${limite} conversões diárias hoje.`);
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  const { data: profile } = await supabaseClient.from('profiles').select('conversions_used, conversion_limit').eq('id', user.id).single();
+
+  toggleMenu();
+  const uso = profile.conversions_used || 0;
+  const limite = profile.conversion_limit || 3;
+  alert(`📊 LIMITES\n\nVocê usou ${uso} de ${limite} conversões diárias hoje.`);
 };
 
 document.getElementById('menu-about').onclick = () => {
-    toggleMenu();
-    alert("ℹ️ SOBRE\n\nConversor PDF para OFX Profissional v1.1\nDesenvolvido para agilizar a conciliação bancária de escritórios contábeis.");
+  toggleMenu();
+  alert("ℹ️ SOBRE\n\nConversor PDF para OFX Profissional v1.1\nDesenvolvido para agilizar a conciliação bancária de escritórios contábeis.");
 };
 
 // --- SISTEMA DE NAVEGAÇÃO ---
@@ -940,26 +942,26 @@ document.getElementById('menu-about').onclick = () => {
 // --- LÓGICA DE NAVEGAÇÃO ENTRE TELAS ---
 
 function navegarPara(idDaTela) {
-    // 1. Esconde todas as seções dentro do app-screen
-    const secoes = document.querySelectorAll('#app-screen section');
-    secoes.forEach(s => s.style.display = 'none');
+  // 1. Esconde todas as seções dentro do app-screen
+  const secoes = document.querySelectorAll('#app-screen section');
+  secoes.forEach(s => s.style.display = 'none');
 
-    // 2. Mostra a seção desejada
-    const telaAlvo = document.getElementById(idDaTela);
-    if (telaAlvo) {
-        telaAlvo.style.display = 'block';
-    }
+  // 2. Mostra a seção desejada
+  const telaAlvo = document.getElementById(idDaTela);
+  if (telaAlvo) {
+    telaAlvo.style.display = 'block';
+  }
 
-    // 3. Fecha o menu lateral e o overlay
-    const sideMenu = document.getElementById('side-menu');
-    const overlay = document.getElementById('sidebar-overlay');
-    if (sideMenu) sideMenu.classList.remove('active');
-    if (overlay) overlay.classList.remove('active');
+  // 3. Fecha o menu lateral e o overlay
+  const sideMenu = document.getElementById('side-menu');
+  const overlay = document.getElementById('sidebar-overlay');
+  if (sideMenu) sideMenu.classList.remove('active');
+  if (overlay) overlay.classList.remove('active');
 }
 
 // Configura os botões de "Voltar" de todas as telas
 document.querySelectorAll('.back-btn').forEach(btn => {
-    btn.onclick = () => navegarPara('view-converter');
+  btn.onclick = () => navegarPara('view-converter');
 });
 
 // --- EVENTOS DO MENU HAMBÚRGUER ---
@@ -969,46 +971,46 @@ document.getElementById('menu-converter').onclick = () => navegarPara('view-conv
 
 // Abrir Perfil (Busca dados no Supabase e exibe na tela)
 document.getElementById('menu-profile').onclick = async () => {
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    
-    if (user) {
-        const { data: profile } = await supabaseClient
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single();
+  const { data: { user } } = await supabaseClient.auth.getUser();
 
-        if (profile) {
-            document.getElementById('prof-name').textContent = `${profile.first_name} ${profile.last_name}`;
-            document.getElementById('prof-office').textContent = profile.office;
-            document.getElementById('prof-status').textContent = profile.plan_status.toUpperCase();
-        }
+  if (user) {
+    const { data: profile } = await supabaseClient
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    if (profile) {
+      document.getElementById('prof-name').textContent = `${profile.first_name} ${profile.last_name}`;
+      document.getElementById('prof-office').textContent = profile.office;
+      document.getElementById('prof-status').textContent = profile.plan_status.toUpperCase();
     }
-    navegarPara('view-profile'); // Abre a tela, não o popup
+  }
+  navegarPara('view-profile'); // Abre a tela, não o popup
 };
 
 // Abrir Limites
 document.getElementById('menu-limits').onclick = async () => {
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    
-    if (user) {
-        const { data: profile } = await supabaseClient
-            .from('profiles')
-            .select('conversions_used, conversion_limit')
-            .eq('id', user.id)
-            .single();
+  const { data: { user } } = await supabaseClient.auth.getUser();
 
-        if (profile) {
-            const uso = profile.conversions_used || 0;
-            const limite = profile.conversion_limit || 3;
-            document.getElementById('limits-display').textContent = `${uso} / ${limite}`;
-            
-            // Opcional: Atualizar cronómetro de reset aqui
-            const infoReset = document.getElementById('reset-timer-view');
-            if (infoReset) infoReset.textContent = "O limite é reiniciado automaticamente à meia-noite.";
-        }
+  if (user) {
+    const { data: profile } = await supabaseClient
+      .from('profiles')
+      .select('conversions_used, conversion_limit')
+      .eq('id', user.id)
+      .single();
+
+    if (profile) {
+      const uso = profile.conversions_used || 0;
+      const limite = profile.conversion_limit || 3;
+      document.getElementById('limits-display').textContent = `${uso} / ${limite}`;
+
+      // Opcional: Atualizar cronómetro de reset aqui
+      const infoReset = document.getElementById('reset-timer-view');
+      if (infoReset) infoReset.textContent = "O limite é reiniciado automaticamente à meia-noite.";
     }
-    navegarPara('view-limits');
+  }
+  navegarPara('view-limits');
 };
 
 // Abrir Sobre
@@ -1016,34 +1018,34 @@ document.getElementById('menu-about').onclick = () => navegarPara('view-about');
 
 // Adicione isto junto aos outros eventos do menu/perfil
 document.getElementById('btn-reset-password').onclick = async () => {
-    const btn = document.getElementById('btn-reset-password');
-    const msg = document.getElementById('reset-msg');
-    
-    try {
-        const { data: { user } } = await supabaseClient.auth.getUser();
-        
-        if (!user) return;
+  const btn = document.getElementById('btn-reset-password');
+  const msg = document.getElementById('reset-msg');
 
-        btn.disabled = true;
-        btn.innerText = "Enviando...";
+  try {
+    const { data: { user } } = await supabaseClient.auth.getUser();
 
-        const { error } = await supabaseClient.auth.resetPasswordForEmail(user.email, {
-            redirectTo: 'https://conversor-ofx-six.vercel.app/', // URL do seu site na Vercel
-        });
+    if (!user) return;
 
-        if (error) throw error;
+    btn.disabled = true;
+    btn.innerText = "Enviando...";
 
-        msg.style.color = "var(--accent)";
-        msg.textContent = "E-mail de redefinição enviado! Verifique sua caixa de entrada.";
-        btn.innerText = "E-mail Enviado";
+    const { error } = await supabaseClient.auth.resetPasswordForEmail(user.email, {
+      redirectTo: 'https://conversor-ofx-six.vercel.app/', // URL do seu site na Vercel
+    });
 
-    } catch (err) {
-        console.error("Erro ao resetar senha:", err);
-        msg.style.color = "var(--accent2)";
-        msg.textContent = "Erro ao enviar e-mail. Tente novamente mais tarde.";
-        btn.disabled = false;
-        btn.innerText = "Tentar novamente";
-    }
+    if (error) throw error;
+
+    msg.style.color = "var(--accent)";
+    msg.textContent = "E-mail de redefinição enviado! Verifique sua caixa de entrada.";
+    btn.innerText = "E-mail Enviado";
+
+  } catch (err) {
+    console.error("Erro ao resetar senha:", err);
+    msg.style.color = "var(--accent2)";
+    msg.textContent = "Erro ao enviar e-mail. Tente novamente mais tarde.";
+    btn.disabled = false;
+    btn.innerText = "Tentar novamente";
+  }
 };
 
 // 1. Detecta que o utilizador voltou pelo link do e-mail
@@ -1052,11 +1054,11 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
     // Esconde a tela de login (se estiver aberta) e força a entrada no app
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app-screen').style.display = 'block';
-    
+
     // Navega diretamente para a nossa nova tela de atualizar senha
     navegarPara('view-update-password');
   }
-  
+
   // (Mantenha o resto da sua lógica SIGNED_IN / SIGNED_OUT aqui se já tiver)
 });
 
@@ -1086,7 +1088,7 @@ document.getElementById('btn-save-new-password').onclick = async () => {
   } else {
     msg.style.color = "var(--accent)"; // Verde
     msg.textContent = "✅ Senha atualizada com sucesso!";
-    
+
     // Limpa o campo e volta para o conversor após 2 segundos
     setTimeout(() => {
       document.getElementById('new-recovery-password').value = '';
