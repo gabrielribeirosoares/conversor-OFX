@@ -229,6 +229,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 // ─── BANCOS ──────────────────────────────────────────────────────────────────
 const BANCOS = {
   "Unicred": { bank_id: "136", type: "UNICRED" },
+
   "Sicredi": {
     bank_id: "748", type: "STANDARD", date_format: "FULL",
     regex: /^\s*(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+([-]?\d{1,3}(?:\.\d{3})*,\d{2})/,
@@ -403,6 +404,7 @@ async function processText(text, bankConfig) {
   let lastDay = null;
   let currentTx = null;
   let nextMemoBuffer = '';
+
   const IGNORAR = [
     "SALDO", "TOTAL", "HISTÓRICO", "HISTORICO", "DATA", "PÁGINA", "PAGINA", "SICOOB", "OUVIDORIA",
     "LOTE", "DOCUMENTO", "PERÍODO", "PERIODO", "NOME", "INSTITUIÇÃO", "DADOS DA CONTA",
@@ -418,9 +420,11 @@ async function processText(text, bankConfig) {
     "++", "OPERACAO", "O LIMITE", "QUANTIDADE", "BENEFICIOS", "TEB", "O SALDO DEVEDOR",
     "AG:", "CC:", "PAGAMENTO S.A", "INFORMAÇÕES DO COMPROVANTE", "CÓDIGO DA AUTENTICAÇÃO",
     "INFORMACÕES", "CODIGO DA AUTENTICACAO", "SE NOSSO ATENDIMENTO", "DÚVIDAS", "DUVIDAS",
-    "REGIÕES", "REGIOES", "ENVIE UM", "OUTRAS", "3004-", "0800","ID. DOC", "ID.DOC", "ID DOC", "ID.", "COOPERATIVA 515", "UNICRED", "SISTEMA DE COOPERATIVAS",
+    "REGIÕES", "REGIOES", "ENVIE UM", "OUTRAS", "3004-", "0800",
+    "ID. DOC", "ID.DOC", "ID DOC", "ID.", "COOPERATIVA 515", "UNICRED", "SISTEMA DE COOPERATIVAS",
     "COOP.", "SISBR", "SISTEMA DE", "C6BANK", "C6 BANK", "LANÇAMENTO", "LANCAMENTO", "CONTÁBIL", "CONTABIL"
   ];
+
   function removerLoteDoc(texto) {
     const partes = texto.trim().split(/\s+/);
     while (partes.length && /^\d+$/.test(partes[0])) partes.shift();
@@ -429,10 +433,15 @@ async function processText(text, bankConfig) {
 
   async function saveTx() {
     if (!currentTx || currentTx.amount === null || currentTx.amount === undefined) return;
+    
+    // 🛡️ BLINDAGEM MÁXIMA: Impede o sistema de crashar se a data for inválida
+    if (isNaN(currentTx.date.getTime())) return;
+
     let memo = currentTx.memo.replace(/\(cid:\d+\)/g, ' ').replace(/\s+/g, ' ').trim();
 
     const upper = memo.toUpperCase();
-    if (["SALDO ANTERIOR", "SALDO DO DIA", "SALDO INICIAL", "SALDO NA DATA", "SALDO CALC"].some(s => upper.includes(s))) return;
+    // Adicionado "SALDO BLOQ" na lista para ignorar o "SALDO BLOQ.ANTERIOR" do Sicoob
+    if (["SALDO ANTERIOR", "SALDO DO DIA", "SALDO INICIAL", "SALDO NA DATA", "SALDO CALC", "SALDO BLOQUEADO", "SALDO BLOQ"].some(s => upper.includes(s))) return;
 
     for (const p of ["PIX ", "Pix - Enviado", "Pix - Recebido", "Pix | ", "Pix "]) {
       if (memo.startsWith(p)) { memo = memo.slice(p.length).trim(); break; }
@@ -461,10 +470,14 @@ async function processText(text, bankConfig) {
 
     const upper = linha.toUpperCase();
     let skip = IGNORAR.some(p => upper.startsWith(p));
+
+    if (!skip && /Entradas:.*Sa[íi]das:/i.test(linha)) skip = true;
+    if (!skip && /^(?:JANEIRO|FEVEREIRO|MAR[CÇ]O|ABRIL|MAIO|JUNHO|JULHO|AGOSTO|SETEMBRO|OUTUBRO|NOVEMBRO|DEZEMBRO)\s+20\d{2}/i.test(linha)) skip = true;
     if (!skip && (/I=PDF|U=NC|G=30/.test(upper))) skip = true;
     if (!skip && /^[\+\-\s]+$/.test(linha)) skip = true;
     if (!skip && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(linha.toLowerCase())) skip = true;
     if (!skip && /^\s*\d{2}[-\/]\d{2}[-\/]\d{2,4}\s+(?:a|até|al|-)\s+\d{2}[-\/]\d{2}[-\/]\d{2,4}/i.test(linha)) skip = true;
+    if (!skip && /^\s*\d{2}\/\d{2}\/\d{4}\s+EXTRATO/i.test(linha)) skip = true;
     if (skip) continue;
 
     if (layout === "UNICRED") {
@@ -500,6 +513,7 @@ async function processText(text, bankConfig) {
         } else { nextMemoBuffer += ' ' + linha; }
       }
     }
+
     else if (layout === "SPLIT_DATE") {
       const mDate = linha.match(bankConfig.regex_date);
       if (mDate) {
@@ -526,6 +540,7 @@ async function processText(text, bankConfig) {
         if (extra) currentTx.memo += ' ' + extra;
       }
     }
+
     else if (layout === "STANDARD") {
       const match = linha.match(bankConfig.regex);
       if (match) {
@@ -543,6 +558,16 @@ async function processText(text, bankConfig) {
         const fmt = bankConfig.date_format;
         if (fmt === "DIA_MES") {
           dateStr = `${dateStr}/${currentYear}`;
+        } else if (fmt === "AUTO") {
+          // 🚀 LÓGICA DE DATA ROBUSTA (Independente da quantidade de caracteres)
+          const p = dateStr.trim().split('/');
+          if (p.length === 2) {
+            dateStr = `${p[0]}/${p[1]}/${currentYear}`; // DD/MM -> DD/MM/AAAA
+          } else if (p.length === 3 && p[2].length === 2) {
+            dateStr = `${p[0]}/${p[1]}/20${p[2]}`; // DD/MM/AA -> DD/MM/AAAA
+          } else {
+            dateStr = dateStr.trim(); // Se já for DD/MM/AAAA, mantém perfeitamente
+          }
         } else if (fmt === "DIA_APENAS") {
           if (dateStr) lastDay = dateStr; else { if (!lastDay) continue; dateStr = lastDay; }
           dateStr = `${dateStr}/${currentMonth}/${currentYear}`;
@@ -578,6 +603,7 @@ async function processText(text, bankConfig) {
             } else { currentTx.memo += ' ' + extra; }
           } else {
             if (bankConfig.bank_id === "197" && ["STONE", "AG:", "CC:", "PAGAMENTO S.A", "INSTITUIÇ", "CONTRAPARTE"].some(c => extra.toUpperCase().includes(c))) { /* skip */ }
+            else if (bankConfig.bank_id === "336") { /* C6 Bank bloqueia ruído de cabeçalho na sala de espera */ }
             else nextMemoBuffer += ' ' + extra;
           }
         }
