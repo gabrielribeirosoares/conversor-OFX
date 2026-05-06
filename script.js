@@ -680,6 +680,45 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
       const ofxContent = generateOFX(txs, cfg.bank_id);
       setProgress(1, `${txs.length} transações processadas ✓`);
 
+      // =========================================================
+      // 🚀 CORREÇÃO: ATUALIZAR CONTADOR DE USO NO SUPABASE
+      // =========================================================
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      if (user) {
+        const hoje = new Date().toISOString().split('T')[0];
+        
+        // Pega as informações atuais do usuário
+        const { data: profile } = await supabaseClient
+          .from('profiles')
+          .select('conversions_used, last_conversion_date, plan_status')
+          .eq('id', user.id)
+          .single();
+
+        // Só gasta conversão se o plano NÃO for ativo (Profissional)
+        if (profile && profile.plan_status !== 'active') {
+          let novoUso = profile.conversions_used || 0;
+          
+          // Se for o primeiro do dia, reseta para 1. Se não, soma +1
+          if (!profile.last_conversion_date || profile.last_conversion_date < hoje) {
+            novoUso = 1; 
+          } else {
+            novoUso += 1; 
+          }
+
+          // Envia a atualização para o Supabase
+          await supabaseClient.from('profiles').update({
+            conversions_used: novoUso,
+            last_conversion_date: hoje
+          }).eq('id', user.id);
+
+          // Atualiza a tela (número verde/vermelho) para refletir o uso imediato
+          if (typeof verificarAcessoEPlano === "function") {
+            await verificarAcessoEPlano(); 
+          }
+        }
+      }
+      // =========================================================
+
       const credits = txs.filter(t => t.amount > 0);
       const debits = txs.filter(t => t.amount < 0);
       const totalC = credits.reduce((s, t) => s + t.amount, 0);
@@ -714,6 +753,30 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
 
   btn.disabled = false;
 });
+
+// Restaurando a função de Gerar OFX que foi cortada na sua mensagem original:
+function generateOFX(transactions, bankId) {
+  const now = new Date();
+  const ts = now.getFullYear().toString() +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0') +
+    String(now.getHours()).padStart(2, '0') +
+    String(now.getMinutes()).padStart(2, '0') +
+    String(now.getSeconds()).padStart(2, '0');
+
+  const header = `OFXHEADER:100\nDATA:OFXSGML\nVERSION:102\nSECURITY:NONE\nENCODING:USASCII\nCHARSET:1252\nCOMPRESSION:NONE\nOLDFILEUID:NONE\nNEWFILEUID:NONE\n<OFX>\n<SIGNONMSGSRSV1><SONRS><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>\n<DTSERVER>${ts}</DTSERVER><LANGUAGE>POR</LANGUAGE></SONRS></SIGNONMSGSRSV1>\n<BANKMSGSRSV1><STMTTRNRS><TRNUID>1001</TRNUID>\n<STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>\n<STMTRS><CURDEF>BRL</CURDEF>\n<BANKACCTFROM><BANKID>${bankId}</BANKID><ACCTID>00000</ACCTID><ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM>\n<BANKTRANLIST><DTSTART>${ts}</DTSTART><DTEND>${ts}</DTEND>\n`;
+
+  let body = '';
+  for (const tx of transactions) {
+    const dtFmt = formatDateOFX(tx.date);
+    const trntype = tx.amount > 0 ? 'CREDIT' : 'DEBIT';
+    const safeMemo = tx.memo.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    body += `<STMTTRN><TRNTYPE>${trntype}</TRNTYPE><DTPOSTED>${dtFmt}</DTPOSTED><TRNAMT>${tx.amount.toFixed(2)}</TRNAMT><FITID>${tx.fitid}</FITID><MEMO>${safeMemo}</MEMO></STMTTRN>\n`;
+  }
+
+  const footer = `</BANKTRANLIST><LEDGERBAL><BALAMT>0.00</BALAMT><DTASOF>${ts}</DTASOF></LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`;
+  return header + body + footer;
+}
 
 document.getElementById('btn-xray').addEventListener('click', async () => {
   const modal = document.getElementById('xray-modal');
