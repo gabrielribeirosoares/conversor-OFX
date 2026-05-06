@@ -420,7 +420,7 @@ async function processText(text, bankConfig) {
     "++", "OPERACAO", "O LIMITE", "QUANTIDADE", "BENEFICIOS", "TEB", "O SALDO DEVEDOR",
     "AG:", "CC:", "PAGAMENTO S.A", "INFORMAÇÕES DO COMPROVANTE", "CÓDIGO DA AUTENTICAÇÃO",
     "INFORMACÕES", "CODIGO DA AUTENTICACAO", "SE NOSSO ATENDIMENTO", "DÚVIDAS", "DUVIDAS",
-    "REGIÕES", "REGIOES", "ENVIE UM", "OUTRAS", "3004-", "0800",
+    "REGIÕES", "REGIOES", "ENVIE UM", "OUTRAS", "3004-", "0800", "VENCIMENTO",
     "ID. DOC", "ID.DOC", "ID DOC", "ID.", "COOPERATIVA 515", "UNICRED", "SISTEMA DE COOPERATIVAS",
     "COOP.", "SISBR", "SISTEMA DE", "C6BANK", "C6 BANK", "LANÇAMENTO", "LANCAMENTO", "CONTÁBIL", "CONTABIL"
   ];
@@ -433,14 +433,11 @@ async function processText(text, bankConfig) {
 
   async function saveTx() {
     if (!currentTx || currentTx.amount === null || currentTx.amount === undefined) return;
-    
-    // 🛡️ BLINDAGEM MÁXIMA: Impede o sistema de crashar se a data for inválida
     if (isNaN(currentTx.date.getTime())) return;
 
     let memo = currentTx.memo.replace(/\(cid:\d+\)/g, ' ').replace(/\s+/g, ' ').trim();
 
     const upper = memo.toUpperCase();
-    // Adicionado "SALDO BLOQ" na lista para ignorar o "SALDO BLOQ.ANTERIOR" do Sicoob
     if (["SALDO ANTERIOR", "SALDO DO DIA", "SALDO INICIAL", "SALDO NA DATA", "SALDO CALC", "SALDO BLOQUEADO", "SALDO BLOQ"].some(s => upper.includes(s))) return;
 
     for (const p of ["PIX ", "Pix - Enviado", "Pix - Recebido", "Pix | ", "Pix "]) {
@@ -510,7 +507,10 @@ async function processText(text, bankConfig) {
               if (rest) currentTx.memo += ' ' + rest;
             } else { currentTx.memo += ' ' + linha; }
           } else { currentTx.memo += ' ' + linha; }
-        } else { nextMemoBuffer += ' ' + linha; }
+        } else {
+          // 🚀 BLINDAGEM UNICRED: Ignora todo o cabeçalho antes da primeira transação
+          // Não faz nada. Deixa o lixo sumir no espaço.
+        }
       }
     }
 
@@ -559,14 +559,13 @@ async function processText(text, bankConfig) {
         if (fmt === "DIA_MES") {
           dateStr = `${dateStr}/${currentYear}`;
         } else if (fmt === "AUTO") {
-          // 🚀 LÓGICA DE DATA ROBUSTA (Independente da quantidade de caracteres)
           const p = dateStr.trim().split('/');
           if (p.length === 2) {
-            dateStr = `${p[0]}/${p[1]}/${currentYear}`; // DD/MM -> DD/MM/AAAA
+            dateStr = `${p[0]}/${p[1]}/${currentYear}`;
           } else if (p.length === 3 && p[2].length === 2) {
-            dateStr = `${p[0]}/${p[1]}/20${p[2]}`; // DD/MM/AA -> DD/MM/AAAA
+            dateStr = `${p[0]}/${p[1]}/20${p[2]}`;
           } else {
-            dateStr = dateStr.trim(); // Se já for DD/MM/AAAA, mantém perfeitamente
+            dateStr = dateStr.trim();
           }
         } else if (fmt === "DIA_APENAS") {
           if (dateStr) lastDay = dateStr; else { if (!lastDay) continue; dateStr = lastDay; }
@@ -603,7 +602,8 @@ async function processText(text, bankConfig) {
             } else { currentTx.memo += ' ' + extra; }
           } else {
             if (bankConfig.bank_id === "197" && ["STONE", "AG:", "CC:", "PAGAMENTO S.A", "INSTITUIÇ", "CONTRAPARTE"].some(c => extra.toUpperCase().includes(c))) { /* skip */ }
-            else if (bankConfig.bank_id === "336") { /* C6 Bank bloqueia ruído de cabeçalho na sala de espera */ }
+            // 🚀 BLINDAGEM BANRISUL E C6: Joga fora o cabeçalho na sala de espera
+            else if (bankConfig.bank_id === "336" || bankConfig.bank_id === "041") { /* skip */ }
             else nextMemoBuffer += ' ' + extra;
           }
         }
