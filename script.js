@@ -121,31 +121,36 @@ document.getElementById('btn-do-register').onclick = async () => {
 // ============================================================================
 // 3. LÓGICA DE LOGIN
 // ============================================================================
+// ============================================================================
+// 3. LÓGICA DE LOGIN
+// ============================================================================
 document.getElementById('btn-do-login').onclick = async () => {
   try {
     const email = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value.trim();
 
     if (!email || !password) {
+      authError.style.color = 'var(--accent2)';
       authError.textContent = 'E-mail e senha são obrigatórios.';
       return;
     }
 
+    authError.style.color = 'var(--text)';
     authError.textContent = 'Acessando...';
 
-    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
     if (error) {
+      authError.style.color = 'var(--accent2)';
       authError.textContent = traduzirErro(error.message);
-    } else {
-      authError.textContent = '';
-      // Antes de liberar a tela, verificamos o pagamento
-      const temAcesso = await verificarAcessoEPlano();
-      permitirEntrada();
     }
+    // Removemos a ordem de "abrir a tela" daqui. 
+    // Quem libera o acesso agora é o onAuthStateChange logo abaixo.
+
   } catch (err) {
     console.error("Erro no login:", err);
-    authError.textContent = 'Erro ao aceder ao servidor.';
+    authError.style.color = 'var(--accent2)';
+    authError.textContent = 'Erro ao conectar com o servidor.';
   }
 };
 
@@ -205,18 +210,28 @@ async function verificarSessaoInicial() {
   }
 }
 
+// Atualiza o monitoramento quando o estado muda
 supabaseClient.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_IN') {
-    // 🚀 GARANTIA: Atualiza os limites na hora do login
-    await verificarAcessoEPlano();
+    try {
+      // 🚀 Atualiza os limites com segurança
+      await verificarAcessoEPlano();
+    } catch (e) {
+      console.error("Erro ao carregar o perfil:", e);
+    }
     
     iniciarMonitoramento();
     permitirEntrada();
+    
+    // Limpa a mensagem "Acessando..." caso tenha vindo do login
+    if (authError) authError.textContent = ''; 
   }
+  
   if (event === 'SIGNED_OUT') {
-    clearInterval(monitorAcesso);
+    if (typeof monitorAcesso !== 'undefined') clearInterval(monitorAcesso);
     bloquearSaida();
   }
+  
   if (event === 'PASSWORD_RECOVERY') {
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app-screen').style.display = 'block';
