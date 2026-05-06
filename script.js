@@ -743,6 +743,7 @@ document.getElementById('btn-convert').addEventListener('click', async () => {
         <div class="tx-list" id="tx-list">${txListHTML}</div>
       `);
 
+      
       document.getElementById('btn-dl').addEventListener('click', () => downloadOFX(ofxContent, ofxName));
     }
   } catch (err) {
