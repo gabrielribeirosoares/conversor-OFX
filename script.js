@@ -224,8 +224,7 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
   }
 });
 
-// Inicia a checagem assim que a página abre
-verificarSessaoInicial();
+
 
 // ============================================================================
 // 4. MOTOR DO CONVERSOR (REGRAS DOS BANCOS)
