@@ -222,6 +222,7 @@ verificarSessaoInicial();
 // ============================================================================
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
+// ─── BANCOS ──────────────────────────────────────────────────────────────────
 const BANCOS = {
   "Unicred": { bank_id: "136", type: "UNICRED" },
   "Sicredi": {
@@ -241,11 +242,14 @@ const BANCOS = {
   },
   "Sicoob": {
     bank_id: "756", type: "STANDARD", date_format: "AUTO",
-    // Aceita datas completas ou curtas e considera C/D como positivo e negativo (ignorando asteriscos)
     regex: /^\s*(\d{2}\/\d{2}(?:\/\d{2,4})?)\s+(.+?)\s+([-]?\s*[\d\.,]+\s*[CDcd]?)\s*(?:\*+)?\s*$/i,
     mapping: { date: 1, desc: 2, amount: 3 }
   },
-
+  "C6 Bank": {
+    bank_id: "336", type: "STANDARD", date_format: "DIA_MES",
+    regex: /^\s*(\d{2}\/\d{2})\s+\d{2}\/\d{2}\s+(.+?)\s+([-–—]?\s*R\$?\s*[\d\.,]+)(?:\s.*)?$/i,
+    mapping: { date: 1, desc: 2, amount: 3 }
+  },
   "Stone": {
     bank_id: "197", type: "STANDARD", date_format: "DD_MM_YY",
     regex: /(?:^|\s)(\d{2}\/\d{2}\/\d{2})\s+(?:Entrada|Sa[íi]da)\s*(.*?)\s*([-–—]?\s*R\$\s*[\d\.,]+)/i,
@@ -257,6 +261,8 @@ const BANCOS = {
     mapping: { date: 1, desc: 2, amount: 3 }
   }
 };
+
+
 
 let selectedBank = null;
 let selectedFile = null;
