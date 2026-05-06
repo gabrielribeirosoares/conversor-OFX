@@ -188,9 +188,6 @@ function iniciarMonitoramento() {
   }, 60000); // 10000ms = 10 segundos
 }
 
-// ==========================================
-// MONITOR DE SEGURANÇA E SESSÃO
-// ==========================================
 async function verificarSessaoInicial() {
   const { data: { session } } = await supabaseClient.auth.getSession();
 
@@ -199,7 +196,7 @@ async function verificarSessaoInicial() {
     if (aindaExiste) {
       // 🚀 CORREÇÃO AQUI: Puxa os limites do banco antes de liberar a interface
       await verificarAcessoEPlano();
-
+      
       permitirEntrada();
       iniciarMonitoramento(); // Começa a vigiar o status
     }
@@ -213,7 +210,7 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_IN') {
     // 🚀 GARANTIA: Atualiza os limites na hora do login
     await verificarAcessoEPlano();
-
+    
     iniciarMonitoramento();
     permitirEntrada();
   }
@@ -672,26 +669,11 @@ function showResult(type, icon, title, bodyHTML) {
 
 document.getElementById('btn-convert').addEventListener('click', async () => {
   if (!selectedBank || !selectedFile) return;
-
-  // =========================================================
-  // 🛡️ TRAVA DE SEGURANÇA MÁXIMA (Double-check no Servidor)
-  // Verifica em tempo real se o usuário ainda tem limite antes de processar o PDF
-  // =========================================================
-  const btn = document.getElementById('btn-convert');
-  btn.disabled = true;
-  btn.innerText = "Verificando limites...";
-
-  const podeConverter = await verificarAcessoEPlano();
-
-  if (!podeConverter) {
-    // Se a função retornar false, a própria função já atualiza a tela para o card vermelho
-    return; // Para a execução imediatamente!
-  }
-  // =========================================================
-
   const cfg = BANCOS[selectedBank];
+  const btn = document.getElementById('btn-convert');
   const progressWrap = document.getElementById('progress-wrap');
 
+  btn.disabled = true;
   progressWrap.classList.add('visible');
   document.getElementById('result-card').className = 'result-card';
   setProgress(0, 'Lendo PDF...');
