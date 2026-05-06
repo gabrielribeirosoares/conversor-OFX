@@ -406,10 +406,10 @@ async function processText(text, bankConfig) {
   let nextMemoBuffer = '';
 
   const IGNORAR = [
-    "SALDO", "TOTAL", "HISTÓRICO", "HISTORICO", "DATA", "PÁGINA", "PAGINA", "SICOOB", "OUVIDORIA",
+    "SALDO", "TOTAL", "HISTÓRICO", "HISTORICO", "DATA", "PÁGINA", "PAGINA", "SICOOB", "SICREDI", "OUVIDORIA",
     "LOTE", "DOCUMENTO", "PERÍODO", "PERIODO", "NOME", "INSTITUIÇÃO", "DADOS DA CONTA",
     "CONTRAPARTE", "TIPO", "DESCRIÇÃO", "DESCRICAO", "VALOR", "EXTRATO", "EMITIDO",
-    "STONE", "AGÊNCIA", "AGENCIA", "CONTA", "DETALHE DOS", "ID DA",
+    "STONE", "AGÊNCIA", "AGENCIA", "CONTA", "DETALHE DOS", "ID DA", "ASSOCIADO", "COOPERATIVA",
     "DDAATTAA", "ENTRADAS", "SAIDAS", "SAÍDAS", "CPF", "CNPJ",
     "BANCO DO ESTADO", "BVP-PORTAL", "SALDOS E MOVIMENTOS", "DADOS SELECIONADOS",
     "CLASSIFICAÇÃO", "CLASSIFICACAO", "EXTRA-CONTÁBIL", "EXTRA-CONTABIL",
@@ -420,7 +420,7 @@ async function processText(text, bankConfig) {
     "++", "OPERACAO", "O LIMITE", "QUANTIDADE", "BENEFICIOS", "TEB", "O SALDO DEVEDOR",
     "AG:", "CC:", "PAGAMENTO S.A", "INFORMAÇÕES DO COMPROVANTE", "CÓDIGO DA AUTENTICAÇÃO",
     "INFORMACÕES", "CODIGO DA AUTENTICACAO", "SE NOSSO ATENDIMENTO", "DÚVIDAS", "DUVIDAS",
-    "REGIÕES", "REGIOES", "ENVIE UM", "OUTRAS", "3004-", "0800",
+    "REGIÕES", "REGIOES", "ENVIE UM", "OUTRAS", "3004-", "0800", "VENCIMENTO",
     "ID. DOC", "ID.DOC", "ID DOC", "ID.", "COOPERATIVA 515", "UNICRED", "SISTEMA DE COOPERATIVAS",
     "COOP.", "SISBR", "SISTEMA DE", "C6BANK", "C6 BANK", "LANÇAMENTO", "LANCAMENTO", "CONTÁBIL", "CONTABIL"
   ];
@@ -512,7 +512,7 @@ async function processText(text, bankConfig) {
             } else { currentTx.memo += ' ' + linha; }
           } else { currentTx.memo += ' ' + linha; }
         } else {
-          // Sala de espera do Unicred
+          // Sala de espera
         }
       }
     }
@@ -566,9 +566,9 @@ async function processText(text, bankConfig) {
           if (p.length === 2) {
             dateStr = `${p[0]}/${p[1]}/${currentYear}`;
           } else if (p.length === 3 && p[2].length === 2) {
-            dateStr = `${p[0]}/${p[1]}/20${p[2]}`;
+            dateStr = `${p[0]}/${p[1]}/20${p[2]}`; 
           } else {
-            dateStr = dateStr.trim();
+            dateStr = dateStr.trim(); 
           }
         } else if (fmt === "DIA_APENAS") {
           if (dateStr) lastDay = dateStr; else { if (!lastDay) continue; dateStr = lastDay; }
@@ -592,12 +592,10 @@ async function processText(text, bankConfig) {
         const extra = removerLoteDoc(linha);
         if (extra) {
           if (currentTx) {
-            // Se já achou transação, processa extras (linha 2 da descrição, etc)
             if (bankConfig.bank_id === "197") {
               const lixo = ["STONE", "AG:", "CC:", "PAGAMENTO S.A", "INSTITUIÇ", "CONTRAPARTE", "SALDO"];
-              // 🚀 NOVO: Adicionado Mastercard, Visa, etc. para colar a linha 2 da Stone!
               const trailing = ["PIX", "ANTECIPA", "TRANSFER", "MAQUININHA", "CARTÃO", "CARTAO", "CRÉDITO", "CREDITO", "DÉBITO", "DEBITO", "MASTERCARD", "VISA", "ELO", "AMEX", "HIPER", "BOLETO"];
-
+              
               if (lixo.some(c => extra.toUpperCase().includes(c))) { /* skip */ }
               else if (trailing.some(t => extra.toUpperCase().includes(t))) currentTx.memo += ' ' + extra;
               else nextMemoBuffer += ' ' + extra;
@@ -609,8 +607,9 @@ async function processText(text, bankConfig) {
           } else {
             // 🚀 BLINDAGEM MÁXIMA DE CABEÇALHO NA SALA DE ESPERA
             // Ignora qualquer texto aleatório ANTES de encontrar a primeira transação financeira
-            if (bankConfig.bank_id === "197" || bankConfig.bank_id === "336" || bankConfig.bank_id === "041") {
-              /* joga no lixo virtual */
+            // Adicionado 748 para blindar o Sicredi
+            if (bankConfig.bank_id === "197" || bankConfig.bank_id === "336" || bankConfig.bank_id === "041" || bankConfig.bank_id === "748") { 
+                /* joga no lixo virtual */ 
             }
             else nextMemoBuffer += ' ' + extra;
           }
